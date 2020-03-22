@@ -35,6 +35,7 @@ import me.lucko.luckperms.common.context.ContextSetComparator;
 import me.lucko.luckperms.common.node.comparator.NodeComparator;
 import me.lucko.luckperms.common.node.comparator.NodeWithContextComparator;
 import me.lucko.luckperms.common.node.model.InheritanceOrigin;
+import me.lucko.luckperms.common.query.QueryOptionsImpl;
 
 import net.luckperms.api.context.ContextSet;
 import net.luckperms.api.context.DefaultContextKeys;
@@ -65,6 +66,7 @@ import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.ConcurrentSkipListSet;
 import java.util.function.Function;
 import java.util.function.Predicate;
+import java.util.stream.Stream;
 
 /**
  * A map of nodes held by a {@link PermissionHolder}.
@@ -112,25 +114,25 @@ public final class NodeMap {
 
     public LinkedHashSet<Node> asSet() {
         LinkedHashSet<Node> set = new LinkedHashSet<>();
-        copyTo(set, QueryOptions.nonContextual());
+        copyTo(set, QueryOptionsImpl.DEFAULT_NON_CONTEXTUAL);
         return set;
     }
 
     public SortedSet<Node> asSortedSet() {
         SortedSet<Node> set = new TreeSet<>(NodeWithContextComparator.reverse());
-        copyTo(set, QueryOptions.nonContextual());
+        copyTo(set, QueryOptionsImpl.DEFAULT_NON_CONTEXTUAL);
         return set;
     }
 
     public LinkedHashSet<InheritanceNode> inheritanceAsSet() {
         LinkedHashSet<InheritanceNode> set = new LinkedHashSet<>();
-        copyInheritanceNodesTo(set, QueryOptions.nonContextual());
+        copyInheritanceNodesTo(set, QueryOptionsImpl.DEFAULT_NON_CONTEXTUAL);
         return set;
     }
 
     public SortedSet<InheritanceNode> inheritanceAsSortedSet() {
         SortedSet<InheritanceNode> set = new TreeSet<>(NodeWithContextComparator.reverse());
-        copyInheritanceNodesTo(set, QueryOptions.nonContextual());
+        copyInheritanceNodesTo(set, QueryOptionsImpl.DEFAULT_NON_CONTEXTUAL);
         return set;
     }
 
@@ -272,12 +274,18 @@ public final class NodeMap {
         this.inheritanceMap.remove(context);
     }
 
-    void setContent(Collection<? extends Node> set) {
+    void setContent(Iterable<? extends Node> set) {
         this.map.clear();
         this.inheritanceMap.clear();
         for (Node n : set) {
             add(n);
         }
+    }
+
+    void setContent(Stream<? extends Node> stream) {
+        this.map.clear();
+        this.inheritanceMap.clear();
+        stream.forEach(this::add);
     }
 
     void setContent(Multimap<ImmutableContextSet, ? extends Node> multimap) {

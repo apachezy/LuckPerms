@@ -28,7 +28,6 @@ package me.lucko.luckperms.common.plugin;
 import me.lucko.luckperms.common.actionlog.LogDispatcher;
 import me.lucko.luckperms.common.api.ApiRegistrationUtil;
 import me.lucko.luckperms.common.api.LuckPermsApiProvider;
-import me.lucko.luckperms.common.api.MinimalApiProvider;
 import me.lucko.luckperms.common.calculator.CalculatorFactory;
 import me.lucko.luckperms.common.config.AbstractConfiguration;
 import me.lucko.luckperms.common.config.ConfigKeys;
@@ -50,7 +49,7 @@ import me.lucko.luckperms.common.sender.Sender;
 import me.lucko.luckperms.common.storage.Storage;
 import me.lucko.luckperms.common.storage.StorageFactory;
 import me.lucko.luckperms.common.storage.StorageType;
-import me.lucko.luckperms.common.storage.implementation.file.FileWatcher;
+import me.lucko.luckperms.common.storage.implementation.file.watcher.FileWatcher;
 import me.lucko.luckperms.common.tasks.SyncTask;
 import me.lucko.luckperms.common.treeview.PermissionRegistry;
 import me.lucko.luckperms.common.verbose.VerboseHandler;
@@ -60,7 +59,6 @@ import net.luckperms.api.LuckPerms;
 
 import okhttp3.OkHttpClient;
 
-import java.io.IOException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.EnumSet;
@@ -106,9 +104,6 @@ public abstract class AbstractLuckPermsPlugin implements LuckPermsPlugin {
         // send the startup banner
         displayBanner(getConsoleSender());
 
-        // minimal api
-        ApiRegistrationUtil.registerProvider(MinimalApiProvider.INSTANCE);
-
         // load some utilities early
         this.verboseHandler = new VerboseHandler(getBootstrap().getScheduler());
         this.permissionRegistry = new PermissionRegistry(getBootstrap().getScheduler());
@@ -138,7 +133,10 @@ public abstract class AbstractLuckPermsPlugin implements LuckPermsPlugin {
         if (getConfiguration().get(ConfigKeys.WATCH_FILES)) {
             try {
                 this.fileWatcher = new FileWatcher(this, getBootstrap().getDataDirectory());
-            } catch (IOException e) {
+            } catch (Throwable e) {
+                // catch throwable here, seems some JVMs throw UnsatisfiedLinkError when trying
+                // to create a watch service. see: https://github.com/lucko/LuckPerms/issues/2066
+                getLogger().warn("Error occurred whilst trying to create a file watcher:");
                 e.printStackTrace();
             }
         }
@@ -189,7 +187,7 @@ public abstract class AbstractLuckPermsPlugin implements LuckPermsPlugin {
         // run an update instantly.
         getLogger().info("Performing initial data load...");
         try {
-            new SyncTask(this, true).run();
+            new SyncTask(this).run();
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -205,6 +203,11 @@ public abstract class AbstractLuckPermsPlugin implements LuckPermsPlugin {
     }
 
     public final void disable() {
+        getLogger().info("Starting shutdown process...");
+
+        // cancel delayed/repeating tasks
+        getBootstrap().getScheduler().shutdownScheduler();
+
         // shutdown permission vault and verbose handler tasks
         this.permissionRegistry.close();
         this.verboseHandler.close();
@@ -233,9 +236,8 @@ public abstract class AbstractLuckPermsPlugin implements LuckPermsPlugin {
         // unregister api
         ApiRegistrationUtil.unregisterProvider();
 
-        // shutdown scheduler
-        getLogger().info("Shutting down internal scheduler...");
-        getBootstrap().getScheduler().shutdown();
+        // shutdown async executor pool
+        getBootstrap().getScheduler().shutdownExecutor();
 
         getLogger().info("Goodbye!");
     }

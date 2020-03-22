@@ -40,6 +40,7 @@ import me.lucko.luckperms.common.model.User;
 import me.lucko.luckperms.common.model.manager.group.GroupManager;
 import me.lucko.luckperms.common.node.factory.NodeBuilders;
 import me.lucko.luckperms.common.node.types.Inheritance;
+import me.lucko.luckperms.common.query.QueryOptionsImpl;
 import me.lucko.luckperms.common.util.Uuids;
 import me.lucko.luckperms.common.verbose.event.MetaCheckEvent;
 import me.lucko.luckperms.common.verbose.event.PermissionCheckEvent;
@@ -51,7 +52,6 @@ import net.luckperms.api.model.data.DataType;
 import net.luckperms.api.node.Node;
 import net.luckperms.api.query.Flag;
 import net.luckperms.api.query.QueryOptions;
-import net.luckperms.api.util.Tristate;
 import net.milkbowl.vault.permission.Permission;
 
 import org.bukkit.Bukkit;
@@ -192,9 +192,7 @@ public class LuckPermsVaultPermission extends AbstractVaultPermission {
         PermissionHolder user = lookupUser(uuid);
         QueryOptions queryOptions = getQueryOptions(uuid, world);
         PermissionCache permissionData = user.getCachedData().getPermissionData(queryOptions);
-
-        Tristate result = permissionData.checkPermission(permission, PermissionCheckEvent.Origin.THIRD_PARTY_API).result();
-        return result != Tristate.UNDEFINED ? result.asBoolean() : org.bukkit.permissions.Permission.DEFAULT_PERMISSION.getValue(queryOptions.option(BukkitContextManager.OP_OPTION).orElse(false));
+        return permissionData.checkPermission(permission, PermissionCheckEvent.Origin.THIRD_PARTY_API).result().asBoolean();
     }
 
     @Override
@@ -281,7 +279,7 @@ public class LuckPermsVaultPermission extends AbstractVaultPermission {
             value = group.getPlainDisplayName();
         }
 
-        this.plugin.getVerboseHandler().offerMetaCheckEvent(MetaCheckEvent.Origin.THIRD_PARTY_API, user.getPlainDisplayName(), QueryOptions.defaultContextualOptions(), "primarygroup", value);
+        this.plugin.getVerboseHandler().offerMetaCheckEvent(MetaCheckEvent.Origin.THIRD_PARTY_API, user.getPlainDisplayName(), QueryOptionsImpl.DEFAULT_CONTEXTUAL, "primarygroup", value);
         return value;
     }
 
@@ -384,7 +382,7 @@ public class LuckPermsVaultPermission extends AbstractVaultPermission {
             op = this.plugin.getConfiguration().get(ConfigKeys.VAULT_NPC_OP_STATUS);
         }
 
-        QueryOptions.Builder builder = QueryOptions.defaultContextualOptions().toBuilder();
+        QueryOptions.Builder builder = QueryOptionsImpl.DEFAULT_CONTEXTUAL.toBuilder();
         builder.context(context);
         builder.flag(Flag.INCLUDE_NODES_WITHOUT_SERVER_CONTEXT, isIncludeGlobal());
         if (op) {

@@ -130,8 +130,8 @@ public enum Dependency {
     COMMODORE(
             "me{}lucko",
             "commodore",
-            "1.5",
-            "vRQpmpYu/R780xwdOV5DNFYvKt9QKhkAVg6if6gMaa4=",
+            "1.7",
+            "ncwmvNFfvyZf1Pa0v4fWyMR0Jxe1v1ZgXOiI255IX5Q=",
             Relocation.of("commodore", "me{}lucko{}commodore")
     ),
     MARIADB_DRIVER(
@@ -342,6 +342,10 @@ public enum Dependency {
         }
     }
     */
+
+    public String getFileName() {
+        return name().toLowerCase().replace('_', '-') + "-" + this.version;
+    }
 
     public List<URL> getUrls() {
         return this.urls;

@@ -25,35 +25,35 @@
 
 package net.luckperms.api.query;
 
+import org.checkerframework.checker.nullness.qual.NonNull;
+
 /**
- * Some default {@link QueryOptions} instances.
+ * A registry providing useful {@link QueryOptions} instances.
+ *
+ * @since 5.1
  */
-final class DefaultQueryOptions {
-    private DefaultQueryOptions() {
-        throw new AssertionError();
-    }
+public interface QueryOptionsRegistry {
 
-    private static boolean setup = false;
-    private static QueryOptions contextual;
-    private static QueryOptions nonContextual;
+    /**
+     * Gets the default {@link QueryMode#CONTEXTUAL contextual}
+     * query options.
+     *
+     * <p>Prefer using the {@link QueryOptions#defaultContextualOptions()} accessor.</p>>
+     *
+     * @return the default contextual query options
+     * @see QueryOptions#defaultContextualOptions()
+     */
+    @NonNull QueryOptions defaultContextualOptions();
 
-    private static void setup() {
-        if (setup) {
-            return;
-        }
-        setup = true;
-        contextual = QueryOptions.builder(QueryMode.CONTEXTUAL).build();
-        nonContextual = QueryOptions.builder(QueryMode.NON_CONTEXTUAL).build();
-    }
-
-    static QueryOptions contextual() {
-        setup();
-        return contextual;
-    }
-
-    static QueryOptions nonContextual() {
-        setup();
-        return nonContextual;
-    }
+    /**
+     * Gets the default {@link QueryMode#NON_CONTEXTUAL non contextual}
+     * query options.
+     *
+     * <p>Prefer using the {@link QueryOptions#nonContextual()} accessor.</p>>
+     *
+     * @return the default non contextual query options
+     * @see QueryOptions#nonContextual()
+     */
+    @NonNull QueryOptions defaultNonContextualOptions();
 
 }
