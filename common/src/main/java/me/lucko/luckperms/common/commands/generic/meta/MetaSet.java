@@ -31,23 +31,18 @@ import me.lucko.luckperms.common.command.abstraction.CommandException;
 import me.lucko.luckperms.common.command.abstraction.GenericChildCommand;
 import me.lucko.luckperms.common.command.access.ArgumentPermissions;
 import me.lucko.luckperms.common.command.access.CommandPermission;
+import me.lucko.luckperms.common.command.spec.CommandSpec;
 import me.lucko.luckperms.common.command.tabcomplete.TabCompleter;
 import me.lucko.luckperms.common.command.tabcomplete.TabCompletions;
-import me.lucko.luckperms.common.command.utils.ArgumentParser;
-import me.lucko.luckperms.common.command.utils.MessageUtils;
+import me.lucko.luckperms.common.command.utils.ArgumentList;
 import me.lucko.luckperms.common.command.utils.StorageAssistant;
-import me.lucko.luckperms.common.locale.LocaleManager;
-import me.lucko.luckperms.common.locale.command.CommandSpec;
-import me.lucko.luckperms.common.locale.message.Message;
+import me.lucko.luckperms.common.locale.Message;
 import me.lucko.luckperms.common.model.PermissionHolder;
 import me.lucko.luckperms.common.node.types.Meta;
 import me.lucko.luckperms.common.plugin.LuckPermsPlugin;
 import me.lucko.luckperms.common.sender.Sender;
 import me.lucko.luckperms.common.util.Predicates;
-import me.lucko.luckperms.common.util.TextUtils;
 
-import net.kyori.text.TextComponent;
-import net.kyori.text.event.HoverEvent;
 import net.luckperms.api.context.MutableContextSet;
 import net.luckperms.api.model.data.DataType;
 import net.luckperms.api.node.Node;
@@ -57,23 +52,23 @@ import net.luckperms.api.node.NodeType;
 import java.util.List;
 
 public class MetaSet extends GenericChildCommand {
-    public MetaSet(LocaleManager locale) {
-        super(CommandSpec.META_SET.localize(locale), "set", CommandPermission.USER_META_SET, CommandPermission.GROUP_META_SET, Predicates.inRange(0, 1));
+    public MetaSet() {
+        super(CommandSpec.META_SET, "set", CommandPermission.USER_META_SET, CommandPermission.GROUP_META_SET, Predicates.inRange(0, 1));
     }
 
     @Override
-    public CommandResult execute(LuckPermsPlugin plugin, Sender sender, PermissionHolder holder, List<String> args, String label, CommandPermission permission) throws CommandException {
-        if (ArgumentPermissions.checkModifyPerms(plugin, sender, permission, holder)) {
+    public CommandResult execute(LuckPermsPlugin plugin, Sender sender, PermissionHolder target, ArgumentList args, String label, CommandPermission permission) throws CommandException {
+        if (ArgumentPermissions.checkModifyPerms(plugin, sender, permission, target)) {
             Message.COMMAND_NO_PERMISSION.send(sender);
             return CommandResult.NO_PERMISSION;
         }
 
         String key = args.get(0);
         String value = args.get(1);
-        MutableContextSet context = ArgumentParser.parseContext(2, args, plugin);
+        MutableContextSet context = args.getContextOrDefault(2, plugin);
 
         if (ArgumentPermissions.checkContext(plugin, sender, permission, context) ||
-                ArgumentPermissions.checkGroup(plugin, sender, holder, context) ||
+                ArgumentPermissions.checkGroup(plugin, sender, target, context) ||
                 ArgumentPermissions.checkArguments(plugin, sender, permission, key)) {
             Message.COMMAND_NO_PERMISSION.send(sender);
             return CommandResult.NO_PERMISSION;
@@ -81,32 +76,26 @@ public class MetaSet extends GenericChildCommand {
 
         Node node = Meta.builder(key, value).withContext(context).build();
 
-        if (holder.hasNode(DataType.NORMAL, node, NodeEqualityPredicate.IGNORE_EXPIRY_TIME_AND_VALUE).asBoolean()) {
-            Message.ALREADY_HAS_META.send(sender, holder.getFormattedDisplayName(), key, value, MessageUtils.contextSetToString(plugin.getLocaleManager(), context));
+        if (target.hasNode(DataType.NORMAL, node, NodeEqualityPredicate.IGNORE_EXPIRY_TIME_AND_VALUE).asBoolean()) {
+            Message.ALREADY_HAS_META.send(sender, target, key, value, context);
             return CommandResult.STATE_ERROR;
         }
 
-        holder.removeIf(DataType.NORMAL, context, NodeType.META.predicate(n -> !n.hasExpiry() && n.getMetaKey().equalsIgnoreCase(key)), false);
-        holder.setNode(DataType.NORMAL, node, true);
+        target.removeIf(DataType.NORMAL, context, NodeType.META.predicate(n -> !n.hasExpiry() && n.getMetaKey().equalsIgnoreCase(key)), false);
+        target.setNode(DataType.NORMAL, node, true);
 
-        TextComponent.Builder builder = Message.SET_META_SUCCESS.asComponent(plugin.getLocaleManager(), key, value, holder.getFormattedDisplayName(), MessageUtils.contextSetToString(plugin.getLocaleManager(), context)).toBuilder();
-        HoverEvent event = HoverEvent.showText(TextUtils.fromLegacy(
-                TextUtils.joinNewline("¥3Raw key: ¥r" + key, "¥3Raw value: ¥r" + value),
-                '¥'
-        ));
-        builder.applyDeep(c -> c.hoverEvent(event));
-        sender.sendMessage(builder.build());
+        Message.SET_META_SUCCESS.send(sender, key, value, target, context);
 
-        LoggedAction.build().source(sender).target(holder)
+        LoggedAction.build().source(sender).target(target)
                 .description("meta", "set", key, value, context)
                 .build().submit(plugin, sender);
 
-        StorageAssistant.save(holder, sender, plugin);
+        StorageAssistant.save(target, sender, plugin);
         return CommandResult.SUCCESS;
     }
 
     @Override
-    public List<String> tabComplete(LuckPermsPlugin plugin, Sender sender, List<String> args) {
+    public List<String> tabComplete(LuckPermsPlugin plugin, Sender sender, ArgumentList args) {
         return TabCompleter.create()
                 .from(2, TabCompletions.contexts(plugin))
                 .complete(args);

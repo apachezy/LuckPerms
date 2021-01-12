@@ -29,6 +29,8 @@ import me.lucko.luckperms.common.calculator.PermissionCalculator;
 import me.lucko.luckperms.common.model.User;
 import me.lucko.luckperms.common.model.manager.Manager;
 
+import net.luckperms.api.node.Node;
+
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
@@ -45,19 +47,11 @@ public interface UserManager<T extends User> extends Manager<UUID, User, T> {
     T getByUsername(String name);
 
     /**
-     * Get a user object by uuid
-     *
-     * @param uuid The uuid to search by
-     * @return a {@link User} object if the user is loaded, returns null if the user is not loaded
-     */
-    T getIfLoaded(UUID uuid);
-
-    /**
      * Gives the user the default group if necessary.
      *
      * @param user the user to give to
      */
-    boolean giveDefaultIfNeeded(User user, boolean save);
+    boolean giveDefaultIfNeeded(User user);
 
     /**
      * Check whether the user's state indicates that they should be persisted to storage.
@@ -65,7 +59,15 @@ public interface UserManager<T extends User> extends Manager<UUID, User, T> {
      * @param user the user to check
      * @return true if the user should be saved
      */
-    boolean shouldSave(User user);
+    boolean isNonDefaultUser(User user);
+
+    /**
+     * Gets whether the given node is a default node given by {@link #giveDefaultIfNeeded(User)}.
+     *
+     * @param node the node
+     * @return true if it is the default node
+     */
+    boolean isDefaultNode(Node node);
 
     /**
      * Gets the instance responsible for unloading unneeded users.

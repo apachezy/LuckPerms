@@ -27,43 +27,45 @@ package me.lucko.luckperms.bukkit.listeners;
 
 import me.lucko.luckperms.bukkit.LPBukkitPlugin;
 import me.lucko.luckperms.common.config.ConfigKeys;
-import me.lucko.luckperms.common.locale.message.Message;
+import me.lucko.luckperms.common.locale.Message;
 
 import org.bukkit.command.CommandSender;
 import org.bukkit.event.Cancellable;
 import org.bukkit.event.EventHandler;
-import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
-import org.bukkit.event.player.PlayerChangedWorldEvent;
 import org.bukkit.event.player.PlayerCommandPreprocessEvent;
 import org.bukkit.event.server.PluginEnableEvent;
 import org.bukkit.event.server.RemoteServerCommandEvent;
 import org.bukkit.event.server.ServerCommandEvent;
 
+import java.util.regex.Pattern;
+
 public class BukkitPlatformListener implements Listener {
+    private static final Pattern OP_COMMAND_PATTERN = Pattern.compile("^/?(\\w+:)?(deop|op)( .*)?$");
+
     private final LPBukkitPlugin plugin;
 
     public BukkitPlatformListener(LPBukkitPlugin plugin) {
         this.plugin = plugin;
     }
 
-    @EventHandler
+    @EventHandler(ignoreCancelled = true)
     public void onPlayerCommand(PlayerCommandPreprocessEvent e) {
         handleCommand(e.getPlayer(), e.getMessage().toLowerCase(), e);
     }
 
-    @EventHandler
+    @EventHandler(ignoreCancelled = true)
     public void onServerCommand(ServerCommandEvent e) {
         handleCommand(e.getSender(), e.getCommand().toLowerCase(), e);
     }
 
-    @EventHandler
+    @EventHandler(ignoreCancelled = true)
     public void onRemoteServerCommand(RemoteServerCommandEvent e) {
         handleCommand(e.getSender(), e.getCommand().toLowerCase(), e);
     }
 
-    private void handleCommand(CommandSender sender, String s, Cancellable event) {
-        if (s.isEmpty()) {
+    private void handleCommand(CommandSender sender, String cmdLine, Cancellable event) {
+        if (cmdLine.isEmpty()) {
             return;
         }
 
@@ -71,17 +73,9 @@ public class BukkitPlatformListener implements Listener {
             return;
         }
 
-        if (s.charAt(0) == '/') {
-            s = s.substring(1);
-        }
-
-        if (s.contains(":")) {
-            s = s.substring(s.indexOf(':') + 1);
-        }
-
-        if (s.equals("op") || s.startsWith("op ") || s.equals("deop") || s.startsWith("deop ")) {
+        if (OP_COMMAND_PATTERN.matcher(cmdLine).matches()) {
             event.setCancelled(true);
-            sender.sendMessage(Message.OP_DISABLED.asString(this.plugin.getLocaleManager()));
+            Message.OP_DISABLED.send(this.plugin.getSenderFactory().wrap(sender));
         }
     }
 
@@ -90,12 +84,6 @@ public class BukkitPlatformListener implements Listener {
         if (e.getPlugin().getName().equalsIgnoreCase("Vault")) {
             this.plugin.tryVaultHook(true);
         }
-    }
-
-    @EventHandler(priority = EventPriority.LOWEST)
-    public void onWorldChange(PlayerChangedWorldEvent e) {
-        this.plugin.getContextManager().invalidateCache(e.getPlayer());
-        this.plugin.refreshAutoOp(e.getPlayer(), true);
     }
 
 }

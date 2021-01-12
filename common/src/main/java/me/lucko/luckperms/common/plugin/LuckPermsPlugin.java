@@ -35,8 +35,10 @@ import me.lucko.luckperms.common.context.ContextManager;
 import me.lucko.luckperms.common.dependencies.DependencyManager;
 import me.lucko.luckperms.common.event.EventDispatcher;
 import me.lucko.luckperms.common.extension.SimpleExtensionManager;
-import me.lucko.luckperms.common.inheritance.InheritanceHandler;
-import me.lucko.luckperms.common.locale.LocaleManager;
+import me.lucko.luckperms.common.http.BytebinClient;
+import me.lucko.luckperms.common.inheritance.InheritanceGraphFactory;
+import me.lucko.luckperms.common.locale.TranslationManager;
+import me.lucko.luckperms.common.locale.TranslationRepository;
 import me.lucko.luckperms.common.messaging.InternalMessagingService;
 import me.lucko.luckperms.common.model.Group;
 import me.lucko.luckperms.common.model.Track;
@@ -53,13 +55,13 @@ import me.lucko.luckperms.common.storage.implementation.file.watcher.FileWatcher
 import me.lucko.luckperms.common.tasks.SyncTask;
 import me.lucko.luckperms.common.treeview.PermissionRegistry;
 import me.lucko.luckperms.common.verbose.VerboseHandler;
-import me.lucko.luckperms.common.web.BytebinClient;
 
 import net.luckperms.api.query.QueryOptions;
 
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.stream.Stream;
 
 /**
@@ -171,9 +173,16 @@ public interface LuckPermsPlugin {
     /**
      * Gets the instance providing locale translations for the plugin
      *
-     * @return the locale manager
+     * @return the translation manager
      */
-    LocaleManager getLocaleManager();
+    TranslationManager getTranslationManager();
+
+    /**
+     * Gets the translation repository
+     *
+     * @return the translation repository
+     */
+    TranslationRepository getTranslationRepository();
 
     /**
      * Gets the dependency manager for the plugin
@@ -188,14 +197,14 @@ public interface LuckPermsPlugin {
      *
      * @return the context manager
      */
-    ContextManager<?> getContextManager();
+    ContextManager<?, ?> getContextManager();
 
     /**
      * Gets the inheritance handler
      *
      * @return the inheritance handler
      */
-    InheritanceHandler getInheritanceHandler();
+    InheritanceGraphFactory getInheritanceGraphFactory();
 
     /**
      * Gets the class responsible for constructing PermissionCalculators on this platform.
@@ -246,6 +255,30 @@ public interface LuckPermsPlugin {
      * @return a contexts object, or null if one couldn't be generated
      */
     Optional<QueryOptions> getQueryOptionsForUser(User user);
+
+    /**
+     * Lookup a uuid from a username.
+     *
+     * @param username the username to lookup
+     * @return an optional uuid, if found
+     */
+    Optional<UUID> lookupUniqueId(String username);
+
+    /**
+     * Lookup a username from a uuid.
+     *
+     * @param uniqueId the uuid to lookup
+     * @return an optional username, if found
+     */
+    Optional<String> lookupUsername(UUID uniqueId);
+
+    /**
+     * Tests whether the given username is valid.
+     *
+     * @param username the username
+     * @return true if valid
+     */
+    boolean testUsernameValidity(String username);
 
     /**
      * Gets a list of online Senders on the platform

@@ -27,11 +27,16 @@ package me.lucko.luckperms.common.bulkupdate;
 
 import me.lucko.luckperms.common.bulkupdate.action.Action;
 import me.lucko.luckperms.common.bulkupdate.query.Query;
+import me.lucko.luckperms.common.model.HolderType;
 
 import net.luckperms.api.node.Node;
 
+import org.checkerframework.checker.nullness.qual.Nullable;
+
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * Represents a query to be applied to a set of data.
@@ -48,10 +53,15 @@ public final class BulkUpdate {
     // a set of constraints which data must match to be acted upon
     private final List<Query> queries;
 
-    public BulkUpdate(DataType dataType, Action action, List<Query> queries) {
+    // update statistics of the operation (number of nodes, users and groups affected)
+    private final BulkUpdateStatistics statistics = new BulkUpdateStatistics();
+    private final boolean trackStatistics;
+
+    public BulkUpdate(DataType dataType, Action action, List<Query> queries, boolean trackStatistics) {
         this.dataType = dataType;
         this.action = action;
         this.queries = queries;
+        this.trackStatistics = trackStatistics;
     }
 
     /**
@@ -70,17 +80,55 @@ public final class BulkUpdate {
     }
 
     /**
-     * Applies this query to the given NodeModel, and returns the result.
+     * Applies this query to the given node, and returns the result.
      *
-     * @param from the node to base changes from
-     * @return the new nodemodel instance, or null if the node should be deleted.
+     * @param node the node to apply changes to
+     * @return the transformed node, or null if the node should be deleted
      */
-    public Node apply(Node from) {
-        if (!satisfiesConstraints(from)) {
-            return from; // make no change
+    private Node apply(Node node) {
+        if (!satisfiesConstraints(node)) {
+            return node; // make no change
         }
 
-        return this.action.apply(from);
+        Node result = this.action.apply(node);
+
+        if (this.trackStatistics && result != node) {
+            this.statistics.incrementAffectedNodes();
+        }
+
+        return result;
+    }
+
+    /**
+     * Applies this query to the given set of nodes, and returns the result.
+     *
+     * @param nodes the input nodes
+     * @param holderType the holder type the nodes are from
+     * @return the transformed nodes, or null if no change was made
+     */
+    public @Nullable Set<Node> apply(Set<Node> nodes, HolderType holderType) {
+        Set<Node> results = new HashSet<>();
+        boolean change = false;
+
+        for (Node node : nodes) {
+            Node result = apply(node);
+            if (result != node) {
+                change = true;
+            }
+            if (result != null) {
+                results.add(result);
+            }
+        }
+
+        if (!change) {
+            return null;
+        }
+
+        if (this.trackStatistics) {
+            this.statistics.incrementAffected(holderType);
+        }
+
+        return results;
     }
 
     /**
@@ -97,6 +145,17 @@ public final class BulkUpdate {
         // add the action
         // (DELETE FROM or UPDATE)
         this.action.appendSql(builder);
+
+        return appendConstraintsAsSql(builder);
+    }
+
+    /**
+     * Appends the constraints of this {@link BulkUpdate} to the provided statement builder in SQL syntax
+     *
+     * @param builder the statement builder to append the constraints to
+     * @return the same statement builder provided as input
+     */
+    public PreparedStatementBuilder appendConstraintsAsSql(PreparedStatementBuilder builder) {
 
         // if there are no constraints, just return without a WHERE clause
         if (this.queries.isEmpty()) {
@@ -131,6 +190,14 @@ public final class BulkUpdate {
         return this.queries;
     }
 
+    public boolean isTrackingStatistics() {
+        return this.trackStatistics;
+    }
+
+    public BulkUpdateStatistics getStatistics() {
+        return this.statistics;
+    }
+
     @Override
     public boolean equals(Object o) {
         if (o == this) return true;
@@ -144,7 +211,7 @@ public final class BulkUpdate {
 
     @Override
     public int hashCode() {
-        return Objects.hash(getDataType(), getAction(), getQueries());
+        return Objects.hash(getDataType(), getAction(), getQueries(), isTrackingStatistics());
     }
 
     @Override
@@ -152,6 +219,7 @@ public final class BulkUpdate {
         return "BulkUpdate(" +
                 "dataType=" + this.getDataType() + ", " +
                 "action=" + this.getAction() + ", " +
-                "constraints=" + this.getQueries() + ")";
+                "constraints=" + this.getQueries() + ", " +
+                "trackStatistics=" + this.isTrackingStatistics() + ")";
     }
 }

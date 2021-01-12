@@ -99,12 +99,12 @@ public final class TabCompletions {
             int index = partial.indexOf('=');
             if (index == -1) {
                 // cursor is specifying the key
-                return CompletionSupplier.startsWith(potentialContexts.toMap().keySet()).supplyCompletions(partial);
+                return CompletionSupplier.contains(potentialContexts.toMap().keySet()).supplyCompletions(partial);
             }
 
             // cursor is specifying the value
             String key = partial.substring(0, index);
-            if (key.equals("") || key.trim().isEmpty()) {
+            if (key.isEmpty() || key.trim().isEmpty()) {
                 return Collections.emptyList();
             }
 

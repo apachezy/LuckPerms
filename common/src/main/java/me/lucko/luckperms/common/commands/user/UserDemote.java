@@ -31,14 +31,12 @@ import me.lucko.luckperms.common.command.abstraction.ChildCommand;
 import me.lucko.luckperms.common.command.abstraction.CommandException;
 import me.lucko.luckperms.common.command.access.ArgumentPermissions;
 import me.lucko.luckperms.common.command.access.CommandPermission;
+import me.lucko.luckperms.common.command.spec.CommandSpec;
 import me.lucko.luckperms.common.command.tabcomplete.TabCompleter;
 import me.lucko.luckperms.common.command.tabcomplete.TabCompletions;
-import me.lucko.luckperms.common.command.utils.ArgumentParser;
-import me.lucko.luckperms.common.command.utils.MessageUtils;
+import me.lucko.luckperms.common.command.utils.ArgumentList;
 import me.lucko.luckperms.common.command.utils.StorageAssistant;
-import me.lucko.luckperms.common.locale.LocaleManager;
-import me.lucko.luckperms.common.locale.command.CommandSpec;
-import me.lucko.luckperms.common.locale.message.Message;
+import me.lucko.luckperms.common.locale.Message;
 import me.lucko.luckperms.common.model.Track;
 import me.lucko.luckperms.common.model.User;
 import me.lucko.luckperms.common.plugin.LuckPermsPlugin;
@@ -50,21 +48,35 @@ import net.luckperms.api.context.MutableContextSet;
 import net.luckperms.api.track.DemotionResult;
 
 import java.util.List;
+import java.util.Set;
 import java.util.function.Predicate;
 
 public class UserDemote extends ChildCommand<User> {
-    public UserDemote(LocaleManager locale) {
-        super(CommandSpec.USER_DEMOTE.localize(locale), "demote", CommandPermission.USER_DEMOTE, Predicates.is(0));
+    public UserDemote() {
+        super(CommandSpec.USER_DEMOTE, "demote", CommandPermission.USER_DEMOTE, Predicates.alwaysFalse());
     }
 
     @Override
-    public CommandResult execute(LuckPermsPlugin plugin, Sender sender, User user, List<String> args, String label) throws CommandException {
-        if (ArgumentPermissions.checkModifyPerms(plugin, sender, getPermission().get(), user)) {
+    public CommandResult execute(LuckPermsPlugin plugin, Sender sender, User target, ArgumentList args, String label) throws CommandException {
+        if (ArgumentPermissions.checkModifyPerms(plugin, sender, getPermission().get(), target)) {
             Message.COMMAND_NO_PERMISSION.send(sender);
             return CommandResult.NO_PERMISSION;
         }
 
         boolean removeFromFirst = !args.remove("--dont-remove-from-first");
+
+        // if args is empty - use the only/default track
+        if (args.isEmpty()) {
+            Set<String> tracks = plugin.getTrackManager().getAll().keySet();
+            if (tracks.size() == 1) {
+                args.add(tracks.iterator().next());
+            } else if (tracks.contains("default")) {
+                args.add("default");
+            } else {
+                Message.USER_TRACK_ERROR_AMBIGUOUS_TRACK_SELECTION.send(sender);
+                return CommandResult.INVALID_ARGS;
+            }
+        }
 
         final String trackName = args.get(0).toLowerCase();
         if (!DataConstraints.TRACK_NAME_TEST.test(trackName)) {
@@ -83,7 +95,7 @@ public class UserDemote extends ChildCommand<User> {
         }
 
         boolean dontShowTrackProgress = args.remove("-s");
-        MutableContextSet context = ArgumentParser.parseContext(1, args, plugin);
+        MutableContextSet context = args.getContextOrDefault(1, plugin);
 
         if (ArgumentPermissions.checkContext(plugin, sender, getPermission().get(), context)) {
             Message.COMMAND_NO_PERMISSION.send(sender);
@@ -94,13 +106,13 @@ public class UserDemote extends ChildCommand<User> {
                 !ArgumentPermissions.checkArguments(plugin, sender, getPermission().get(), track.getName(), s) &&
                 !ArgumentPermissions.checkGroup(plugin, sender, s, context);
 
-        DemotionResult result = track.demote(user, context, previousGroupPermissionChecker, sender, removeFromFirst);
+        DemotionResult result = track.demote(target, context, previousGroupPermissionChecker, sender, removeFromFirst);
         switch (result.getStatus()) {
             case NOT_ON_TRACK:
-                Message.USER_TRACK_ERROR_NOT_CONTAIN_GROUP.send(sender, user.getFormattedDisplayName(), track.getName());
+                Message.USER_TRACK_ERROR_NOT_CONTAIN_GROUP.send(sender, target, track.getName());
                 return CommandResult.FAILURE;
             case AMBIGUOUS_CALL:
-                Message.TRACK_AMBIGUOUS_CALL.send(sender, user.getFormattedDisplayName());
+                Message.TRACK_AMBIGUOUS_CALL.send(sender, target);
                 return CommandResult.FAILURE;
             case UNDEFINED_FAILURE:
                 Message.COMMAND_NO_PERMISSION.send(sender);
@@ -111,17 +123,17 @@ public class UserDemote extends ChildCommand<User> {
 
             case REMOVED_FROM_FIRST_GROUP: {
                 if (!removeFromFirst && !result.getGroupFrom().isPresent()) {
-                    Message.USER_DEMOTE_ENDOFTRACK_NOT_REMOVED.send(sender, track.getName(), user.getFormattedDisplayName());
+                    Message.USER_DEMOTE_ENDOFTRACK_NOT_REMOVED.send(sender, track.getName(), target);
                     return CommandResult.STATE_ERROR;
                 }
 
-                Message.USER_DEMOTE_ENDOFTRACK.send(sender, track.getName(), user.getFormattedDisplayName(), result.getGroupFrom().get());
+                Message.USER_DEMOTE_ENDOFTRACK.send(sender, track.getName(), target, result.getGroupFrom().get());
 
-                LoggedAction.build().source(sender).target(user)
+                LoggedAction.build().source(sender).target(target)
                         .description("demote", track.getName(), context)
                         .build().submit(plugin, sender);
 
-                StorageAssistant.save(user, sender, plugin);
+                StorageAssistant.save(target, sender, plugin);
                 return CommandResult.SUCCESS;
             }
 
@@ -129,16 +141,16 @@ public class UserDemote extends ChildCommand<User> {
                 String groupFrom = result.getGroupFrom().get();
                 String groupTo = result.getGroupTo().get();
 
-                Message.USER_DEMOTE_SUCCESS.send(sender, user.getFormattedDisplayName(), track.getName(), groupFrom, groupTo, MessageUtils.contextSetToString(plugin.getLocaleManager(), context));
+                Message.USER_DEMOTE_SUCCESS.send(sender, target, track.getName(), groupFrom, groupTo, context);
                 if (!dontShowTrackProgress) {
-                    Message.BLANK.send(sender, MessageUtils.listToArrowSep(track.getGroups(), groupTo, groupFrom, true));
+                    Message.TRACK_PATH_HIGHLIGHTED_PROGRESSION.send(sender, track.getGroups(), groupTo, groupFrom, true);
                 }
 
-                LoggedAction.build().source(sender).target(user)
+                LoggedAction.build().source(sender).target(target)
                         .description("demote", track.getName(), context)
                         .build().submit(plugin, sender);
 
-                StorageAssistant.save(user, sender, plugin);
+                StorageAssistant.save(target, sender, plugin);
                 return CommandResult.SUCCESS;
             }
 
@@ -148,7 +160,7 @@ public class UserDemote extends ChildCommand<User> {
     }
 
     @Override
-    public List<String> tabComplete(LuckPermsPlugin plugin, Sender sender, List<String> args) {
+    public List<String> tabComplete(LuckPermsPlugin plugin, Sender sender, ArgumentList args) {
         return TabCompleter.create()
                 .at(0, TabCompletions.tracks(plugin))
                 .from(1, TabCompletions.contexts(plugin))

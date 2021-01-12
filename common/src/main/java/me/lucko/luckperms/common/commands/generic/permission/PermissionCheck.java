@@ -30,13 +30,11 @@ import me.lucko.luckperms.common.command.abstraction.CommandException;
 import me.lucko.luckperms.common.command.abstraction.GenericChildCommand;
 import me.lucko.luckperms.common.command.access.ArgumentPermissions;
 import me.lucko.luckperms.common.command.access.CommandPermission;
+import me.lucko.luckperms.common.command.spec.CommandSpec;
 import me.lucko.luckperms.common.command.tabcomplete.TabCompleter;
 import me.lucko.luckperms.common.command.tabcomplete.TabCompletions;
-import me.lucko.luckperms.common.command.utils.ArgumentParser;
-import me.lucko.luckperms.common.command.utils.MessageUtils;
-import me.lucko.luckperms.common.locale.LocaleManager;
-import me.lucko.luckperms.common.locale.command.CommandSpec;
-import me.lucko.luckperms.common.locale.message.Message;
+import me.lucko.luckperms.common.command.utils.ArgumentList;
+import me.lucko.luckperms.common.locale.Message;
 import me.lucko.luckperms.common.model.PermissionHolder;
 import me.lucko.luckperms.common.node.factory.NodeBuilders;
 import me.lucko.luckperms.common.plugin.LuckPermsPlugin;
@@ -51,29 +49,27 @@ import net.luckperms.api.util.Tristate;
 import java.util.List;
 
 public class PermissionCheck extends GenericChildCommand {
-    public PermissionCheck(LocaleManager locale) {
-        super(CommandSpec.PERMISSION_CHECK.localize(locale), "check", CommandPermission.USER_PERM_CHECK, CommandPermission.GROUP_PERM_CHECK, Predicates.is(0));
+    public PermissionCheck() {
+        super(CommandSpec.PERMISSION_CHECK, "check", CommandPermission.USER_PERM_CHECK, CommandPermission.GROUP_PERM_CHECK, Predicates.is(0));
     }
 
     @Override
-    public CommandResult execute(LuckPermsPlugin plugin, Sender sender, PermissionHolder holder, List<String> args, String label, CommandPermission permission) throws CommandException {
-        if (ArgumentPermissions.checkViewPerms(plugin, sender, permission, holder)) {
+    public CommandResult execute(LuckPermsPlugin plugin, Sender sender, PermissionHolder target, ArgumentList args, String label, CommandPermission permission) throws CommandException {
+        if (ArgumentPermissions.checkViewPerms(plugin, sender, permission, target)) {
             Message.COMMAND_NO_PERMISSION.send(sender);
             return CommandResult.NO_PERMISSION;
         }
 
-        String node = ArgumentParser.parseString(0, args);
-        MutableContextSet context = ArgumentParser.parseContext(1, args, plugin);
+        String node = args.get(0);
+        MutableContextSet context = args.getContextOrDefault(1, plugin);
 
-        Tristate result = holder.hasNode(DataType.NORMAL, NodeBuilders.determineMostApplicable(node).withContext(context).build(), NodeEqualityPredicate.IGNORE_VALUE_OR_IF_TEMPORARY);
-        String s = MessageUtils.formatTristate(result);
-
-        Message.CHECK_PERMISSION.send(sender, holder.getFormattedDisplayName(), node, s, MessageUtils.contextSetToString(plugin.getLocaleManager(), context));
+        Tristate result = target.hasNode(DataType.NORMAL, NodeBuilders.determineMostApplicable(node).withContext(context).build(), NodeEqualityPredicate.IGNORE_VALUE_OR_IF_TEMPORARY);
+        Message.CHECK_PERMISSION.send(sender, target, node, result, context);
         return CommandResult.SUCCESS;
     }
 
     @Override
-    public List<String> tabComplete(LuckPermsPlugin plugin, Sender sender, List<String> args) {
+    public List<String> tabComplete(LuckPermsPlugin plugin, Sender sender, ArgumentList args) {
         return TabCompleter.create()
                 .at(0, TabCompletions.permissions(plugin))
                 .from(1, TabCompletions.contexts(plugin))

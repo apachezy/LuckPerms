@@ -25,22 +25,22 @@
 
 package me.lucko.luckperms.nukkit;
 
-import me.lucko.luckperms.common.plugin.LuckPermsPlugin;
+import me.lucko.luckperms.common.locale.TranslationManager;
 import me.lucko.luckperms.common.sender.Sender;
 import me.lucko.luckperms.common.sender.SenderFactory;
-import me.lucko.luckperms.common.util.TextUtils;
 
-import net.kyori.text.Component;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import net.luckperms.api.util.Tristate;
 
 import cn.nukkit.Player;
 import cn.nukkit.command.CommandSender;
-import cn.nukkit.command.ConsoleCommandSender;
 
+import java.util.Locale;
 import java.util.UUID;
 
-public class NukkitSenderFactory extends SenderFactory<CommandSender> {
-    public NukkitSenderFactory(LuckPermsPlugin plugin) {
+public class NukkitSenderFactory extends SenderFactory<LPNukkitPlugin, CommandSender> {
+    public NukkitSenderFactory(LPNukkitPlugin plugin) {
         super(plugin);
     }
 
@@ -61,21 +61,14 @@ public class NukkitSenderFactory extends SenderFactory<CommandSender> {
     }
 
     @Override
-    protected void sendMessage(CommandSender sender, String s) {
-        // we can safely send async for players and the console
-        if (sender instanceof Player || sender instanceof ConsoleCommandSender) {
-            sender.sendMessage(s);
-            return;
-        }
-
-        // otherwise, send the message sync
-        getPlugin().getBootstrap().getScheduler().executeSync(new SyncMessengerAgent(sender, s));
-    }
-
-    @Override
     protected void sendMessage(CommandSender sender, Component message) {
         // Fallback to legacy format
-        sendMessage(sender, TextUtils.toLegacy(message));
+        Locale locale = null;
+        if (sender instanceof Player) {
+            locale = ((Player) sender).getLocale();
+        }
+        Component rendered = TranslationManager.render(message, locale);
+        sender.sendMessage(LegacyComponentSerializer.legacySection().serialize(rendered));
     }
 
     @Override
@@ -94,19 +87,9 @@ public class NukkitSenderFactory extends SenderFactory<CommandSender> {
         return sender.hasPermission(node);
     }
 
-    private static final class SyncMessengerAgent implements Runnable {
-        private final CommandSender sender;
-        private final String message;
-
-        private SyncMessengerAgent(CommandSender sender, String message) {
-            this.sender = sender;
-            this.message = message;
-        }
-
-        @Override
-        public void run() {
-            this.sender.sendMessage(this.message);
-        }
+    @Override
+    protected void performCommand(CommandSender sender, String command) {
+        getPlugin().getBootstrap().getServer().dispatchCommand(sender, command);
     }
 
 }

@@ -30,14 +30,14 @@ import me.lucko.luckperms.common.command.CommandResult;
 import me.lucko.luckperms.common.command.abstraction.GenericChildCommand;
 import me.lucko.luckperms.common.command.access.ArgumentPermissions;
 import me.lucko.luckperms.common.command.access.CommandPermission;
+import me.lucko.luckperms.common.command.spec.CommandSpec;
 import me.lucko.luckperms.common.command.tabcomplete.TabCompleter;
 import me.lucko.luckperms.common.command.tabcomplete.TabCompletions;
+import me.lucko.luckperms.common.command.utils.ArgumentList;
 import me.lucko.luckperms.common.command.utils.StorageAssistant;
 import me.lucko.luckperms.common.config.ConfigKeys;
 import me.lucko.luckperms.common.context.contextset.ImmutableContextSetImpl;
-import me.lucko.luckperms.common.locale.LocaleManager;
-import me.lucko.luckperms.common.locale.command.CommandSpec;
-import me.lucko.luckperms.common.locale.message.Message;
+import me.lucko.luckperms.common.locale.Message;
 import me.lucko.luckperms.common.model.Group;
 import me.lucko.luckperms.common.model.PermissionHolder;
 import me.lucko.luckperms.common.model.User;
@@ -54,16 +54,16 @@ import net.luckperms.api.node.NodeEqualityPredicate;
 import java.util.List;
 
 public class UserSwitchPrimaryGroup extends GenericChildCommand {
-    public UserSwitchPrimaryGroup(LocaleManager locale) {
-        super(CommandSpec.USER_SWITCHPRIMARYGROUP.localize(locale), "switchprimarygroup", CommandPermission.USER_PARENT_SWITCHPRIMARYGROUP, null, Predicates.not(1));
+    public UserSwitchPrimaryGroup() {
+        super(CommandSpec.USER_SWITCHPRIMARYGROUP, "switchprimarygroup", CommandPermission.USER_PARENT_SWITCHPRIMARYGROUP, null, Predicates.not(1));
     }
 
     @Override
-    public CommandResult execute(LuckPermsPlugin plugin, Sender sender, PermissionHolder holder, List<String> args, String label, CommandPermission permission) {
+    public CommandResult execute(LuckPermsPlugin plugin, Sender sender, PermissionHolder target, ArgumentList args, String label, CommandPermission permission) {
         // cast to user
         // although this command is build as a sharedsubcommand,
         // it is only added to the listings for users.
-        User user = ((User) holder);
+        User user = ((User) target);
 
         if (ArgumentPermissions.checkModifyPerms(plugin, sender, permission, user)) {
             Message.COMMAND_NO_PERMISSION.send(sender);
@@ -82,7 +82,7 @@ public class UserSwitchPrimaryGroup extends GenericChildCommand {
         }
 
         if (ArgumentPermissions.checkContext(plugin, sender, permission, ImmutableContextSetImpl.EMPTY) ||
-                ArgumentPermissions.checkGroup(plugin, sender, holder, ImmutableContextSetImpl.EMPTY) ||
+                ArgumentPermissions.checkGroup(plugin, sender, target, ImmutableContextSetImpl.EMPTY) ||
                 ArgumentPermissions.checkGroup(plugin, sender, group, ImmutableContextSetImpl.EMPTY) ||
                 ArgumentPermissions.checkArguments(plugin, sender, permission, group.getName())) {
             Message.COMMAND_NO_PERMISSION.send(sender);
@@ -90,18 +90,18 @@ public class UserSwitchPrimaryGroup extends GenericChildCommand {
         }
 
         if (user.getPrimaryGroup().getStoredValue().orElse(GroupManager.DEFAULT_GROUP_NAME).equalsIgnoreCase(group.getName())) {
-            Message.USER_PRIMARYGROUP_ERROR_ALREADYHAS.send(sender, user.getFormattedDisplayName(), group.getFormattedDisplayName());
+            Message.USER_PRIMARYGROUP_ERROR_ALREADYHAS.send(sender, user, group);
             return CommandResult.STATE_ERROR;
         }
 
         Node node = Inheritance.builder(group.getName()).build();
         if (!user.hasNode(DataType.NORMAL, node, NodeEqualityPredicate.IGNORE_VALUE).asBoolean()) {
-            Message.USER_PRIMARYGROUP_ERROR_NOTMEMBER.send(sender, user.getFormattedDisplayName(), group.getName());
-            holder.setNode(DataType.NORMAL, node, true);
+            Message.USER_PRIMARYGROUP_ERROR_NOTMEMBER.send(sender, user, group);
+            target.setNode(DataType.NORMAL, node, true);
         }
 
         user.getPrimaryGroup().setStoredValue(group.getName());
-        Message.USER_PRIMARYGROUP_SUCCESS.send(sender, user.getFormattedDisplayName(), group.getFormattedDisplayName());
+        Message.USER_PRIMARYGROUP_SUCCESS.send(sender, user, group);
 
         LoggedAction.build().source(sender).target(user)
                 .description("parent", "switchprimarygroup", group.getName())
@@ -112,7 +112,7 @@ public class UserSwitchPrimaryGroup extends GenericChildCommand {
     }
 
     @Override
-    public List<String> tabComplete(LuckPermsPlugin plugin, Sender sender, List<String> args) {
+    public List<String> tabComplete(LuckPermsPlugin plugin, Sender sender, ArgumentList args) {
         return TabCompleter.create()
                 .at(0, TabCompletions.groups(plugin))
                 .complete(args);

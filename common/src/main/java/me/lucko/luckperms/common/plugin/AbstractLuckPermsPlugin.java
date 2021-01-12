@@ -29,31 +29,32 @@ import me.lucko.luckperms.common.actionlog.LogDispatcher;
 import me.lucko.luckperms.common.api.ApiRegistrationUtil;
 import me.lucko.luckperms.common.api.LuckPermsApiProvider;
 import me.lucko.luckperms.common.calculator.CalculatorFactory;
-import me.lucko.luckperms.common.config.AbstractConfiguration;
 import me.lucko.luckperms.common.config.ConfigKeys;
 import me.lucko.luckperms.common.config.LuckPermsConfiguration;
-import me.lucko.luckperms.common.config.adapter.ConfigurationAdapter;
-import me.lucko.luckperms.common.context.LPStaticContextsCalculator;
+import me.lucko.luckperms.common.config.generic.adapter.ConfigurationAdapter;
+import me.lucko.luckperms.common.context.ConfigurationContextCalculator;
 import me.lucko.luckperms.common.dependencies.Dependency;
 import me.lucko.luckperms.common.dependencies.DependencyManager;
 import me.lucko.luckperms.common.event.AbstractEventBus;
 import me.lucko.luckperms.common.event.EventDispatcher;
+import me.lucko.luckperms.common.event.gen.GeneratedEventClass;
 import me.lucko.luckperms.common.extension.SimpleExtensionManager;
-import me.lucko.luckperms.common.inheritance.InheritanceHandler;
-import me.lucko.luckperms.common.locale.LocaleManager;
-import me.lucko.luckperms.common.locale.message.Message;
+import me.lucko.luckperms.common.http.BytebinClient;
+import me.lucko.luckperms.common.inheritance.InheritanceGraphFactory;
+import me.lucko.luckperms.common.locale.Message;
+import me.lucko.luckperms.common.locale.TranslationManager;
+import me.lucko.luckperms.common.locale.TranslationRepository;
 import me.lucko.luckperms.common.messaging.InternalMessagingService;
 import me.lucko.luckperms.common.messaging.MessagingFactory;
 import me.lucko.luckperms.common.plugin.logging.PluginLogger;
-import me.lucko.luckperms.common.sender.Sender;
 import me.lucko.luckperms.common.storage.Storage;
 import me.lucko.luckperms.common.storage.StorageFactory;
 import me.lucko.luckperms.common.storage.StorageType;
 import me.lucko.luckperms.common.storage.implementation.file.watcher.FileWatcher;
+import me.lucko.luckperms.common.storage.misc.DataConstraints;
 import me.lucko.luckperms.common.tasks.SyncTask;
 import me.lucko.luckperms.common.treeview.PermissionRegistry;
 import me.lucko.luckperms.common.verbose.VerboseHandler;
-import me.lucko.luckperms.common.web.BytebinClient;
 
 import net.luckperms.api.LuckPerms;
 
@@ -61,28 +62,32 @@ import okhttp3.OkHttpClient;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.Month;
 import java.util.EnumSet;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 public abstract class AbstractLuckPermsPlugin implements LuckPermsPlugin {
 
     // init during load
     private DependencyManager dependencyManager;
+    private TranslationManager translationManager;
 
     // init during enable
     private VerboseHandler verboseHandler;
     private PermissionRegistry permissionRegistry;
     private LogDispatcher logDispatcher;
     private LuckPermsConfiguration configuration;
-    private LocaleManager localeManager;
     private BytebinClient bytebin;
+    private TranslationRepository translationRepository;
     private FileWatcher fileWatcher = null;
     private Storage storage;
     private InternalMessagingService messagingService = null;
     private SyncTask.Buffer syncTaskBuffer;
-    private InheritanceHandler inheritanceHandler;
+    private InheritanceGraphFactory inheritanceGraphFactory;
     private CalculatorFactory calculatorFactory;
     private LuckPermsApiProvider apiProvider;
     private EventDispatcher eventDispatcher;
@@ -96,13 +101,16 @@ public abstract class AbstractLuckPermsPlugin implements LuckPermsPlugin {
         this.dependencyManager = new DependencyManager(this);
         this.dependencyManager.loadDependencies(getGlobalDependencies());
 
-        // load the sender factory instance
-        setupSenderFactory();
+        this.translationManager = new TranslationManager(this);
+        this.translationManager.reload();
     }
 
     public final void enable() {
+        // load the sender factory instance
+        setupSenderFactory();
+
         // send the startup banner
-        displayBanner(getConsoleSender());
+        Message.STARTUP_BANNER.send(getConsoleSender(), getBootstrap());
 
         // load some utilities early
         this.verboseHandler = new VerboseHandler(getBootstrap().getScheduler());
@@ -111,14 +119,18 @@ public abstract class AbstractLuckPermsPlugin implements LuckPermsPlugin {
 
         // load configuration
         getLogger().info("Loading configuration...");
-        this.configuration = new AbstractConfiguration(this, provideConfigurationAdapter());
-
-        // load locale
-        this.localeManager = new LocaleManager();
-        this.localeManager.tryLoad(this, getBootstrap().getConfigDirectory().resolve("lang.yml"));
+        this.configuration = new LuckPermsConfiguration(this, provideConfigurationAdapter());
 
         // setup a bytebin instance
-        this.bytebin = new BytebinClient(new OkHttpClient(), getConfiguration().get(ConfigKeys.BYTEBIN_URL), "luckperms");
+        OkHttpClient httpClient = new OkHttpClient.Builder()
+                .callTimeout(15, TimeUnit.SECONDS)
+                .build();
+
+        this.bytebin = new BytebinClient(httpClient, getConfiguration().get(ConfigKeys.BYTEBIN_URL), "luckperms");
+
+        // init translation repo and update bundle files
+        this.translationRepository = new TranslationRepository(this);
+        this.translationRepository.scheduleRefresh();
 
         // now the configuration is loaded, we can create a storage factory and load initial dependencies
         StorageFactory storageFactory = new StorageFactory(this);
@@ -136,8 +148,7 @@ public abstract class AbstractLuckPermsPlugin implements LuckPermsPlugin {
             } catch (Throwable e) {
                 // catch throwable here, seems some JVMs throw UnsatisfiedLinkError when trying
                 // to create a watch service. see: https://github.com/lucko/LuckPerms/issues/2066
-                getLogger().warn("Error occurred whilst trying to create a file watcher:");
-                e.printStackTrace();
+                getLogger().warn("Error occurred whilst trying to create a file watcher:", e);
             }
         }
 
@@ -153,7 +164,7 @@ public abstract class AbstractLuckPermsPlugin implements LuckPermsPlugin {
 
         // load internal managers
         getLogger().info("Loading internal permission managers...");
-        this.inheritanceHandler = new InheritanceHandler(this);
+        this.inheritanceGraphFactory = new InheritanceGraphFactory(this);
 
         // setup user/group/track manager
         setupManagers();
@@ -163,7 +174,7 @@ public abstract class AbstractLuckPermsPlugin implements LuckPermsPlugin {
 
         // setup contextmanager & register common calculators
         setupContextManager();
-        getContextManager().registerCalculator(new LPStaticContextsCalculator(getConfiguration()));
+        getContextManager().registerCalculator(new ConfigurationContextCalculator(getConfiguration()));
 
         // setup platform hooks
         setupPlatformHooks();
@@ -171,6 +182,7 @@ public abstract class AbstractLuckPermsPlugin implements LuckPermsPlugin {
         // register with the LP API
         this.apiProvider = new LuckPermsApiProvider(this);
         this.eventDispatcher = new EventDispatcher(provideEventBus(this.apiProvider));
+        getBootstrap().getScheduler().executeAsync(GeneratedEventClass::preGenerate);
         ApiRegistrationUtil.registerProvider(this.apiProvider);
         registerApiOnPlatform(this.apiProvider);
 
@@ -244,12 +256,11 @@ public abstract class AbstractLuckPermsPlugin implements LuckPermsPlugin {
 
     protected Set<Dependency> getGlobalDependencies() {
         return EnumSet.of(
-                Dependency.TEXT,
-                Dependency.TEXT_SERIALIZER_GSON,
-                Dependency.TEXT_SERIALIZER_LEGACY,
+                Dependency.ADVENTURE,
                 Dependency.CAFFEINE,
                 Dependency.OKIO,
                 Dependency.OKHTTP,
+                Dependency.BYTEBUDDY,
                 Dependency.EVENT
         );
     }
@@ -283,8 +294,60 @@ public abstract class AbstractLuckPermsPlugin implements LuckPermsPlugin {
     }
 
     @Override
+    public Optional<UUID> lookupUniqueId(String username) {
+        // get a result from the DB cache
+        UUID uniqueId = getStorage().getPlayerUniqueId(username.toLowerCase()).join();
+
+        // fire the event
+        uniqueId = getEventDispatcher().dispatchUniqueIdLookup(username, uniqueId);
+
+        // try the servers cache
+        if (uniqueId == null && getConfiguration().get(ConfigKeys.USE_SERVER_UUID_CACHE)) {
+            uniqueId = getBootstrap().lookupUniqueId(username).orElse(null);
+        }
+
+        return Optional.ofNullable(uniqueId);
+    }
+
+    @Override
+    public Optional<String> lookupUsername(UUID uniqueId) {
+        // get a result from the DB cache
+        String username = getStorage().getPlayerName(uniqueId).join();
+
+        // fire the event
+        username = getEventDispatcher().dispatchUsernameLookup(uniqueId, username);
+
+        // try the servers cache
+        if (username == null && getConfiguration().get(ConfigKeys.USE_SERVER_UUID_CACHE)) {
+            username = getBootstrap().lookupUsername(uniqueId).orElse(null);
+        }
+
+        return Optional.ofNullable(username);
+    }
+
+    @Override
+    public boolean testUsernameValidity(String username) {
+        // if the username doesn't even pass the lenient test, don't bother going any further
+        // it's either empty, or too long to fit in the sql column
+        if (!DataConstraints.PLAYER_USERNAME_TEST_LENIENT.test(username)) {
+            return false;
+        }
+
+        // if invalid usernames are allowed in the config, set valid to true, otherwise, use the more strict test
+        boolean valid = getConfiguration().get(ConfigKeys.ALLOW_INVALID_USERNAMES) || DataConstraints.PLAYER_USERNAME_TEST.test(username);
+
+        // fire the event & return
+        return getEventDispatcher().dispatchUsernameValidityCheck(username, valid);
+    }
+
+    @Override
     public DependencyManager getDependencyManager() {
         return this.dependencyManager;
+    }
+
+    @Override
+    public TranslationManager getTranslationManager() {
+        return this.translationManager;
     }
 
     @Override
@@ -308,13 +371,13 @@ public abstract class AbstractLuckPermsPlugin implements LuckPermsPlugin {
     }
 
     @Override
-    public LocaleManager getLocaleManager() {
-        return this.localeManager;
+    public BytebinClient getBytebin() {
+        return this.bytebin;
     }
 
     @Override
-    public BytebinClient getBytebin() {
-        return this.bytebin;
+    public TranslationRepository getTranslationRepository() {
+        return this.translationRepository;
     }
 
     @Override
@@ -338,8 +401,8 @@ public abstract class AbstractLuckPermsPlugin implements LuckPermsPlugin {
     }
 
     @Override
-    public InheritanceHandler getInheritanceHandler() {
-        return this.inheritanceHandler;
+    public InheritanceGraphFactory getInheritanceGraphFactory() {
+        return this.inheritanceGraphFactory;
     }
 
     @Override
@@ -362,10 +425,11 @@ public abstract class AbstractLuckPermsPlugin implements LuckPermsPlugin {
         return this.eventDispatcher;
     }
 
-    private void displayBanner(Sender sender) {
-        sender.sendMessage(Message.colorize("&b       &3 __    "));
-        sender.sendMessage(Message.colorize("&b  |    &3|__)   " + "&2LuckPerms &bv" + getBootstrap().getVersion()));
-        sender.sendMessage(Message.colorize("&b  |___ &3|      " + "&8Running on " + getBootstrap().getType().getFriendlyName() + " - " + getBootstrap().getServerBrand()));
-        sender.sendMessage("");
+    public static String getPluginName() {
+        LocalDate date = LocalDate.now();
+        if (date.getMonth() == Month.APRIL && date.getDayOfMonth() == 1) {
+            return "LuckyPerms";
+        }
+        return "LuckPerms";
     }
 }

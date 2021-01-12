@@ -25,6 +25,10 @@
 
 package me.lucko.luckperms.common.storage.implementation.sql.connection;
 
+import me.lucko.luckperms.common.plugin.LuckPermsPlugin;
+
+import net.kyori.adventure.text.Component;
+
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.Collections;
@@ -35,11 +39,11 @@ public interface ConnectionFactory {
 
     String getImplementationName();
 
-    void init();
+    void init(LuckPermsPlugin plugin);
 
     void shutdown() throws Exception;
 
-    default Map<String, String> getMeta() {
+    default Map<Component, Component> getMeta() {
         return Collections.emptyMap();
     }
 

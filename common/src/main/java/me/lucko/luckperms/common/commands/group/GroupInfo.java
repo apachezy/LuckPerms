@@ -25,50 +25,48 @@
 
 package me.lucko.luckperms.common.commands.group;
 
+import me.lucko.luckperms.common.cacheddata.type.MetaCache;
 import me.lucko.luckperms.common.command.CommandResult;
 import me.lucko.luckperms.common.command.abstraction.ChildCommand;
 import me.lucko.luckperms.common.command.access.ArgumentPermissions;
 import me.lucko.luckperms.common.command.access.CommandPermission;
-import me.lucko.luckperms.common.command.utils.MessageUtils;
-import me.lucko.luckperms.common.locale.LocaleManager;
-import me.lucko.luckperms.common.locale.command.CommandSpec;
-import me.lucko.luckperms.common.locale.message.Message;
+import me.lucko.luckperms.common.command.spec.CommandSpec;
+import me.lucko.luckperms.common.command.utils.ArgumentList;
+import me.lucko.luckperms.common.locale.Message;
 import me.lucko.luckperms.common.model.Group;
 import me.lucko.luckperms.common.plugin.LuckPermsPlugin;
 import me.lucko.luckperms.common.sender.Sender;
-import me.lucko.luckperms.common.util.DurationFormatter;
 import me.lucko.luckperms.common.util.Predicates;
+import me.lucko.luckperms.common.verbose.event.MetaCheckEvent;
 
 import net.luckperms.api.node.Node;
 import net.luckperms.api.node.types.InheritanceNode;
+import net.luckperms.api.query.QueryOptions;
 
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 public class GroupInfo extends ChildCommand<Group> {
-    public GroupInfo(LocaleManager locale) {
-        super(CommandSpec.GROUP_INFO.localize(locale), "info", CommandPermission.GROUP_INFO, Predicates.alwaysFalse());
+    public GroupInfo() {
+        super(CommandSpec.GROUP_INFO, "info", CommandPermission.GROUP_INFO, Predicates.alwaysFalse());
     }
 
     @Override
-    public CommandResult execute(LuckPermsPlugin plugin, Sender sender, Group group, List<String> args, String label) {
-        if (ArgumentPermissions.checkViewPerms(plugin, sender, getPermission().get(), group)) {
+    public CommandResult execute(LuckPermsPlugin plugin, Sender sender, Group target, ArgumentList args, String label) {
+        if (ArgumentPermissions.checkViewPerms(plugin, sender, getPermission().get(), target)) {
             Message.COMMAND_NO_PERMISSION.send(sender);
             return CommandResult.NO_PERMISSION;
         }
 
-        Message.GROUP_INFO_GENERAL.send(sender,
-                group.getName(),
-                group.getPlainDisplayName(),
-                group.getWeight().isPresent() ? group.getWeight().getAsInt() : "None"
-        );
+        Message.GROUP_INFO_GENERAL.send(sender, target.getName(), target.getPlainDisplayName(), target.getWeight());
 
-        List<InheritanceNode> parents = group.normalData().inheritanceAsSortedSet().stream()
+        List<InheritanceNode> parents = target.normalData().inheritanceAsSortedSet().stream()
                 .filter(Node::getValue)
                 .filter(n -> !n.hasExpiry())
                 .collect(Collectors.toList());
 
-        List<InheritanceNode> tempParents = group.normalData().inheritanceAsSortedSet().stream()
+        List<InheritanceNode> tempParents = target.normalData().inheritanceAsSortedSet().stream()
                 .filter(Node::getValue)
                 .filter(Node::hasExpiry)
                 .collect(Collectors.toList());
@@ -76,17 +74,24 @@ public class GroupInfo extends ChildCommand<Group> {
         if (!parents.isEmpty()) {
             Message.INFO_PARENT_HEADER.send(sender);
             for (InheritanceNode node : parents) {
-                Message.INFO_PARENT_ENTRY.send(sender, node.getGroupName(), MessageUtils.getAppendableNodeContextString(plugin.getLocaleManager(), node));
+                Message.INFO_PARENT_NODE_ENTRY.send(sender, node);
             }
         }
 
         if (!tempParents.isEmpty()) {
             Message.INFO_TEMP_PARENT_HEADER.send(sender);
             for (InheritanceNode node : tempParents) {
-                Message.INFO_PARENT_ENTRY.send(sender, node.getGroupName(), MessageUtils.getAppendableNodeContextString(plugin.getLocaleManager(), node));
-                Message.INFO_PARENT_ENTRY_EXPIRY.send(sender, DurationFormatter.LONG.format(node.getExpiryDuration()));
+                Message.INFO_PARENT_TEMPORARY_NODE_ENTRY.send(sender, node);
             }
         }
+
+        QueryOptions queryOptions = plugin.getContextManager().getStaticQueryOptions();
+        MetaCache data = target.getCachedData().getMetaData(queryOptions);
+        String prefix = data.getPrefix(MetaCheckEvent.Origin.INTERNAL);
+        String suffix = data.getSuffix(MetaCheckEvent.Origin.INTERNAL);
+        Map<String, List<String>> meta = data.getMeta(MetaCheckEvent.Origin.INTERNAL);
+
+        Message.GROUP_INFO_CONTEXTUAL_DATA.send(sender, prefix, suffix, meta);
         return CommandResult.SUCCESS;
     }
 }

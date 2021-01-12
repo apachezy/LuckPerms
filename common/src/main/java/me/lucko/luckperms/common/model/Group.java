@@ -29,9 +29,12 @@ import me.lucko.luckperms.common.api.implementation.ApiGroup;
 import me.lucko.luckperms.common.cache.Cache;
 import me.lucko.luckperms.common.cacheddata.GroupCachedDataManager;
 import me.lucko.luckperms.common.config.ConfigKeys;
+import me.lucko.luckperms.common.locale.Message;
 import me.lucko.luckperms.common.plugin.LuckPermsPlugin;
 
-import net.luckperms.api.node.Node;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
+import net.luckperms.api.node.NodeType;
 import net.luckperms.api.node.types.DisplayNameNode;
 import net.luckperms.api.query.QueryOptions;
 
@@ -41,7 +44,7 @@ import java.util.Optional;
 import java.util.OptionalInt;
 
 public class Group extends PermissionHolder {
-    private final ApiGroup apiDelegate = new ApiGroup(this);
+    private final ApiGroup apiProxy = new ApiGroup(this);
 
     /**
      * The name of the group
@@ -90,8 +93,13 @@ public class Group extends PermissionHolder {
         return this.name;
     }
 
-    public ApiGroup getApiDelegate() {
-        return this.apiDelegate;
+    public ApiGroup getApiProxy() {
+        return this.apiProxy;
+    }
+
+    @Override
+    public QueryOptions getQueryOptions() {
+        return getPlugin().getContextManager().getStaticQueryOptions();
     }
 
     @Override
@@ -100,9 +108,22 @@ public class Group extends PermissionHolder {
     }
 
     @Override
-    public String getFormattedDisplayName() {
-        Optional<String> dn = getDisplayName();
-        return dn.map(s -> this.name + " &r(" + s + "&r)").orElse(this.name);
+    public Component getFormattedDisplayName() {
+        String displayName = getDisplayName().orElse(null);
+        if (displayName != null) {
+            return Component.text()
+                    .content(this.name)
+                    .append(Component.space())
+                    .append(Component.text()
+                            .color(NamedTextColor.WHITE)
+                            .append(Message.OPEN_BRACKET)
+                            .append(Component.text(displayName))
+                            .append(Message.CLOSE_BRACKET)
+                    )
+                    .build();
+        } else {
+            return Component.text(this.name);
+        }
     }
 
     @Override
@@ -116,11 +137,8 @@ public class Group extends PermissionHolder {
 
     public Optional<String> calculateDisplayName(QueryOptions queryOptions) {
         // query for a displayname node
-        for (Node n : getOwnNodes(queryOptions)) {
-            if (n instanceof DisplayNameNode) {
-                DisplayNameNode displayNameNode = (DisplayNameNode) n;
-                return Optional.of(displayNameNode.getDisplayName());
-            }
+        for (DisplayNameNode n : getOwnNodes(NodeType.DISPLAY_NAME, queryOptions)) {
+            return Optional.of(n.getDisplayName());
         }
 
         // fallback to config

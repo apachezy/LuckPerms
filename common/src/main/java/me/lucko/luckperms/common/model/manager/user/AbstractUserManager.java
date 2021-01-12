@@ -25,8 +25,6 @@
 
 package me.lucko.luckperms.common.model.manager.user;
 
-import com.google.common.collect.ImmutableCollection;
-
 import me.lucko.luckperms.common.config.ConfigKeys;
 import me.lucko.luckperms.common.context.contextset.ImmutableContextSetImpl;
 import me.lucko.luckperms.common.model.User;
@@ -34,19 +32,20 @@ import me.lucko.luckperms.common.model.manager.AbstractManager;
 import me.lucko.luckperms.common.model.manager.group.GroupManager;
 import me.lucko.luckperms.common.node.types.Inheritance;
 import me.lucko.luckperms.common.plugin.LuckPermsPlugin;
-import me.lucko.luckperms.common.util.Iterators;
+import me.lucko.luckperms.common.verbose.event.MetaCheckEvent;
 
 import net.luckperms.api.model.data.DataType;
 import net.luckperms.api.node.Node;
 import net.luckperms.api.node.types.InheritanceNode;
 
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 public abstract class AbstractUserManager<T extends User> extends AbstractManager<UUID, User, T> implements UserManager<T> {
 
@@ -56,7 +55,7 @@ public abstract class AbstractUserManager<T extends User> extends AbstractManage
     public AbstractUserManager(LuckPermsPlugin plugin, UserHousekeeper.TimeoutSettings timeoutSettings) {
         this.plugin = plugin;
         this.housekeeper = new UserHousekeeper(plugin, this, timeoutSettings);
-        this.plugin.getBootstrap().getScheduler().asyncRepeating(this.housekeeper, 10, TimeUnit.SECONDS);
+        this.plugin.getBootstrap().getScheduler().asyncRepeating(this.housekeeper, 30, TimeUnit.SECONDS);
     }
 
     @Override
@@ -80,15 +79,17 @@ public abstract class AbstractUserManager<T extends User> extends AbstractManage
     }
 
     @Override
-    public boolean giveDefaultIfNeeded(User user, boolean save) {
-        boolean work = false;
+    public boolean giveDefaultIfNeeded(User user) {
+        boolean requireSave = false;
+
+        Collection<InheritanceNode> globalGroups = user.normalData().inheritanceNodesInContext(ImmutableContextSetImpl.EMPTY);
 
         // check that they are actually a member of their primary group, otherwise remove it
         if (this.plugin.getConfiguration().get(ConfigKeys.PRIMARY_GROUP_CALCULATION_METHOD).equals("stored")) {
-            String primaryGroup = user.getPrimaryGroup().getValue();
+            String primaryGroup = user.getCachedData().getMetaData(this.plugin.getConfiguration().get(ConfigKeys.GLOBAL_QUERY_OPTIONS)).getPrimaryGroup(MetaCheckEvent.Origin.INTERNAL);
             boolean memberOfPrimaryGroup = false;
 
-            for (InheritanceNode node : user.normalData().immutableInheritance().get(ImmutableContextSetImpl.EMPTY)) {
+            for (InheritanceNode node : globalGroups) {
                 if (node.getGroupName().equalsIgnoreCase(primaryGroup)) {
                     memberOfPrimaryGroup = true;
                     break;
@@ -97,7 +98,7 @@ public abstract class AbstractUserManager<T extends User> extends AbstractManage
 
             // need to find a new primary group for the user.
             if (!memberOfPrimaryGroup) {
-                String group = user.normalData().immutableInheritance().get(ImmutableContextSetImpl.EMPTY).stream()
+                String group = globalGroups.stream()
                         .findFirst()
                         .map(InheritanceNode::getGroupName)
                         .orElse(null);
@@ -105,7 +106,7 @@ public abstract class AbstractUserManager<T extends User> extends AbstractManage
                 // if the group is null, it'll be resolved in the next step
                 if (group != null) {
                     user.getPrimaryGroup().setStoredValue(group);
-                    work = true;
+                    requireSave = true;
                 }
             }
         }
@@ -113,20 +114,45 @@ public abstract class AbstractUserManager<T extends User> extends AbstractManage
         // check that all users are member of at least one group
         boolean hasGroup = false;
         if (user.getPrimaryGroup().getStoredValue().isPresent()) {
-            hasGroup = !user.normalData().immutableInheritance().get(ImmutableContextSetImpl.EMPTY).isEmpty();
+            hasGroup = !globalGroups.isEmpty();
         }
 
         if (!hasGroup) {
             user.getPrimaryGroup().setStoredValue(GroupManager.DEFAULT_GROUP_NAME);
             user.setNode(DataType.NORMAL, Inheritance.builder(GroupManager.DEFAULT_GROUP_NAME).build(), false);
-            work = true;
+            requireSave = true;
         }
 
-        if (work && save) {
-            this.plugin.getStorage().saveUser(user);
+        return requireSave;
+    }
+
+    @Override
+    public boolean isNonDefaultUser(User user) {
+        if (user.normalData().size() != 1) {
+            return true;
         }
 
-        return work;
+        List<Node> nodes = user.normalData().asList();
+        if (nodes.size() != 1) {
+            return true;
+        }
+
+        Node onlyNode = nodes.iterator().next();
+        if (!isDefaultNode(onlyNode)) {
+            return true;
+        }
+
+        // Not in the default primary group
+        return !user.getPrimaryGroup().getStoredValue().orElse(GroupManager.DEFAULT_GROUP_NAME).equalsIgnoreCase(GroupManager.DEFAULT_GROUP_NAME);
+    }
+
+    @Override
+    public boolean isDefaultNode(Node node) {
+        return node instanceof InheritanceNode &&
+                node.getValue() &&
+                !node.hasExpiry() &&
+                node.getContexts().isEmpty() &&
+                ((InheritanceNode) node).getGroupName().equalsIgnoreCase(GroupManager.DEFAULT_GROUP_NAME);
     }
 
     @Override
@@ -136,16 +162,14 @@ public abstract class AbstractUserManager<T extends User> extends AbstractManage
 
     @Override
     public CompletableFuture<Void> loadAllUsers() {
-        Set<UUID> ids = Stream.concat(
-                getAll().keySet().stream(),
-                this.plugin.getBootstrap().getOnlinePlayers()
-        ).collect(Collectors.toSet());
+        Set<UUID> ids = new HashSet<>(getAll().keySet());
+        ids.addAll(this.plugin.getBootstrap().getOnlinePlayers());
 
-        return CompletableFuture.runAsync(() -> {
-            Iterators.tryIterate(ids, id -> {
-                this.plugin.getStorage().loadUser(id, null).join();
-            });
-        }, this.plugin.getBootstrap().getScheduler().async());
+        CompletableFuture<?>[] loadTasks = ids.stream()
+                .map(id -> this.plugin.getStorage().loadUser(id, null))
+                .toArray(CompletableFuture[]::new);
+
+        return CompletableFuture.allOf(loadTasks);
     }
 
     @Override
@@ -158,35 +182,4 @@ public abstract class AbstractUserManager<T extends User> extends AbstractManage
         getAll().values().forEach(u -> u.getCachedData().invalidatePermissionCalculators());
     }
 
-    /**
-     * Check whether the user's state indicates that they should be persisted to storage.
-     *
-     * @param user the user to check
-     * @return true if the user should be saved
-     */
-    @Override
-    public boolean shouldSave(User user) {
-        ImmutableCollection<Node> nodes = user.normalData().immutable().values();
-        if (nodes.size() != 1) {
-            return true;
-        }
-
-        Node onlyNode = nodes.iterator().next();
-        if (!(onlyNode instanceof InheritanceNode)) {
-            return true;
-        }
-
-        if (onlyNode.hasExpiry() || !onlyNode.getContexts().isEmpty()) {
-            return true;
-        }
-
-        if (!((InheritanceNode) onlyNode).getGroupName().equalsIgnoreCase(GroupManager.DEFAULT_GROUP_NAME)) {
-            // The user's only node is not the default group one.
-            return true;
-        }
-
-
-        // Not in the default primary group
-        return !user.getPrimaryGroup().getStoredValue().orElse(GroupManager.DEFAULT_GROUP_NAME).equalsIgnoreCase(GroupManager.DEFAULT_GROUP_NAME);
-    }
 }

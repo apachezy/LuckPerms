@@ -30,11 +30,15 @@ import com.google.common.collect.ImmutableList;
 import me.lucko.luckperms.common.dependencies.relocation.Relocation;
 import me.lucko.luckperms.common.dependencies.relocation.RelocationHelper;
 
-import java.net.MalformedURLException;
-import java.net.URL;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.Arrays;
 import java.util.Base64;
 import java.util.List;
 
+/**
+ * The dependencies used by LuckPerms.
+ */
 public enum Dependency {
 
     ASM(
@@ -56,47 +60,40 @@ public enum Dependency {
             "1RsiF3BiVztjlfTA+svDCuoDSGFuSpTZYHvUK8yBx8I="
     ),
 
-    TEXT(
-            "net{}kyori",
-            "text-api",
-            "3.0.2",
-            "seZnPElZhfba3XO8/LLUWQHE35kqVM02HpswEVcJqz0=",
-            Relocation.of("text", "net{}kyori{}text")
+    ADVENTURE(
+            "me{}lucko",
+            "adventure-api",
+            "4.0.1",
+            "6dKz0iM9MChLzU5MTLW5HSLFEmmNh/D9Bb6kzJvK/1E=",
+            Relocation.of("adventure", "net{}kyori{}adventure")
     ),
-    TEXT_SERIALIZER_GSON(
-            "net{}kyori",
-            "text-serializer-gson",
-            "3.0.2",
-            "8gJFpnqSHp762TWXn3x5ICLiKg2KgEwEA1FFyOtJ92Y=",
-            Relocation.of("text", "net{}kyori{}text")
+    ADVENTURE_PLATFORM(
+            "me{}lucko",
+            "adventure-platform-api",
+            "4.0.1",
+            "ie3rz49jg5HU04mWe/f6lXjHt6L+S2SQp/x6YFbhxsc=",
+            Relocation.of("adventure", "net{}kyori{}adventure")
     ),
-    TEXT_SERIALIZER_LEGACY(
-            "net{}kyori",
-            "text-serializer-legacy",
-            "3.0.2",
-            "ks8pZV6ZUHWtwD93Xynyg0KaAMs8CLa61Zb8CaLPsdM=",
-            Relocation.of("text", "net{}kyori{}text")
+    ADVENTURE_PLATFORM_BUKKIT(
+            "me{}lucko",
+            "adventure-platform-bukkit",
+            "4.0.1",
+            "dVbYfUJqmde8jeuTvknCL9hbzqxybal00TELTzQgLbk=",
+            Relocation.of("adventure", "net{}kyori{}adventure")
     ),
-    TEXT_ADAPTER_BUKKIT(
-            "net{}kyori",
-            "text-adapter-bukkit",
-            "3.0.2",
-            "VnbfELmOHV6DVidHJql6gmsCjfhABEnF6q9LTezUrQg=",
-            Relocation.of("text", "net{}kyori{}text")
+    ADVENTURE_PLATFORM_BUNGEECORD(
+            "me{}lucko",
+            "adventure-platform-bungeecord",
+            "4.0.1",
+            "4phi0TxNKVj5Lko63nlkrd5snIJcaU+cXUfAWsbCX1U=",
+            Relocation.of("adventure", "net{}kyori{}adventure")
     ),
-    TEXT_ADAPTER_BUNGEECORD(
-            "net{}kyori",
-            "text-adapter-bungeecord",
-            "3.0.2",
-            "ZmCmc67danKpZru8rJsDppJZ+f8joquULZI8y/YX4ks=",
-            Relocation.of("text", "net{}kyori{}text")
-    ),
-    TEXT_ADAPTER_SPONGEAPI(
-            "net{}kyori",
-            "text-adapter-spongeapi",
-            "3.0.2",
-            "WPWFw1g8niEGgymV9PdyLADMSL6+UQ7FKdtxnJb79JE=",
-            Relocation.of("text", "net{}kyori{}text")
+    ADVENTURE_PLATFORM_SPONGEAPI(
+            "me{}lucko",
+            "adventure-platform-spongeapi",
+            "4.0.1",
+            "6fjWuZMeJ6633RKuZh6sIlMyVIzryQoewONeei2nB+4=",
+            Relocation.of("adventure", "net{}kyori{}adventure")
     ),
     EVENT(
             "net{}kyori",
@@ -108,24 +105,31 @@ public enum Dependency {
     CAFFEINE(
             "com{}github{}ben-manes{}caffeine",
             "caffeine",
-            "2.8.0",
-            "sRB6QJe+RRWpI6Vbxj2gTkEeaWSqBFvs4bx6y4SHLtc=",
+            "2.8.4",
+            "KV9YN5gQj6b507VJApJpPF5PkCon0DZqAi0T7Ln0lag=",
             Relocation.of("caffeine", "com{}github{}benmanes{}caffeine")
     ),
     OKIO(
             "com{}squareup{}" + RelocationHelper.OKIO_STRING,
             RelocationHelper.OKIO_STRING,
-            "1.17.4",
-            "14+sWIRY/AmebILpH+XwN1xnQ0YmRRo6d3csZdnu6Fs=",
+            "1.17.5",
+            "Gaf/SNhtPPRJf38lD78pX0MME6Uo3Vt7ID+CGAK4hq0=",
             Relocation.of(RelocationHelper.OKIO_STRING, RelocationHelper.OKIO_STRING)
     ),
     OKHTTP(
             "com{}squareup{}" + RelocationHelper.OKHTTP3_STRING,
             "okhttp",
-            "3.14.4",
-            "WMyzdU8VzELfjxaHs7qGMw7ZfH5S5cPoP+ETG4DOPg8=",
+            "3.14.7",
+            "Yg1PpDxcal72JXYCBKiHmeHkpl4ceh2NoC4GHEy7gAA=",
             Relocation.of(RelocationHelper.OKHTTP3_STRING, RelocationHelper.OKHTTP3_STRING),
             Relocation.of(RelocationHelper.OKIO_STRING, RelocationHelper.OKIO_STRING)
+    ),
+    BYTEBUDDY(
+            "net{}bytebuddy",
+            "byte-buddy",
+            "1.10.9",
+            "B7nKbi+XDLA/SyVlHfHy/OJx1JG0TgQJgniHeG9pLU0=",
+            Relocation.of("bytebuddy", "net{}bytebuddy")
     ),
     COMMODORE(
             "me{}lucko",
@@ -137,15 +141,15 @@ public enum Dependency {
     MARIADB_DRIVER(
             "org{}mariadb{}jdbc",
             "mariadb-java-client",
-            "2.5.1",
-            "/AxG0o0JnIme7hnDTO2WEUxgF1yXPiWPhMKermXAzZE=",
+            "2.7.0",
+            "ABURDun85Q01kf119r4yjDtl5ju9Fg9uV2nXyU3SEdw=",
             Relocation.of("mariadb", "org{}mariadb{}jdbc")
     ),
     MYSQL_DRIVER(
             "mysql",
             "mysql-connector-java",
-            "5.1.48",
-            "VuJsqqOCH1rkr0T5x09mz4uE6gFRatOAPLsOkEm27Kg=",
+            "8.0.22",
+            "UBne+9EjFilel6bojyqbB/EYNFpOmCcQu6Iy5JmyL08=",
             Relocation.of("mysql", "com{}mysql")
     ),
     POSTGRESQL_DRIVER(
@@ -176,65 +180,64 @@ public enum Dependency {
     HIKARI(
             "com{}zaxxer",
             "HikariCP",
-            "3.4.1",
-            "uCbLTp8iz699ZJS3TxSAf4j9UfrikmgxvTHT0+N/Bck=",
+            "3.4.5",
+            "i3MvlHBXDUqEHcHvbIJrWGl4sluoMHEv8fpZ3idd+mE=",
             Relocation.of("hikari", "com{}zaxxer{}hikari")
     ),
     SLF4J_SIMPLE(
             "org.slf4j",
             "slf4j-simple",
-            "1.7.28",
-            "YO863GwYR8RuGr16gGIlWqPizh2ywI37H9Q/GkYgdzY="
+            "1.7.30",
+            "i5J5y/9rn4hZTvrjzwIDm2mVAw7sAj7UOSh0jEFnD+4="
     ),
     SLF4J_API(
             "org.slf4j",
             "slf4j-api",
-            "1.7.28",
-            "+25PZ6KkaJ4+cTWE2xel0QkMHr5u7DDp4DSabuEYFB4="
+            "1.7.30",
+            "zboHlk0btAoHYUhcax6ML4/Z6x0ZxTkorA1/lRAQXFc="
     ),
     MONGODB_DRIVER(
             "org.mongodb",
             "mongo-java-driver",
-            "3.11.1",
-            "tIWEOrQegZK3TT7mNV4ZnjkpW4ViwPiFEpD6yYPyFmE=",
+            "3.12.2",
+            "eMxHcEtasb/ubFCv99kE5rVZMPGmBei674ZTdjYe58w=",
             Relocation.of("mongodb", "com{}mongodb"),
             Relocation.of("bson", "org{}bson")
     ),
     JEDIS(
             "redis.clients",
             "jedis",
-            "2.10.2",
-            "06PKnEnk08yYpdI2IUAZYxJjp0d6lDp0nGQkWw3CWsU=",
+            "3.3.0",
+            "HuTfz9xW/mi1fwVQ3xgPmd6qwTRMF/3fyMzw2LmOgy4=",
             Relocation.of("jedis", "redis{}clients{}jedis"),
-            Relocation.of("jedisutil", "redis{}clients{}util"),
             Relocation.of("commonspool2", "org{}apache{}commons{}pool2")
     ),
     COMMONS_POOL_2(
             "org.apache.commons",
             "commons-pool2",
-            "2.7.0",
-            "a1TGdcc4fhV9KMcJiHPy53LCI8ejW8mxNxc2fJdToeQ=",
+            "2.8.0",
+            "Xvqfu1SlixoSIFpfrFZfaYKr/rD/Rb28MYdI71/To/8=",
             Relocation.of("commonspool2", "org{}apache{}commons{}pool2")
     ),
     CONFIGURATE_CORE(
-            "me{}lucko{}configurate",
+            "org{}spongepowered",
             "configurate-core",
-            "3.5",
-            "J+1WnX1g5gr4ne8qA7DuBadLDOsZnOZjwHbdRmVgF6c=",
+            "3.7",
+            "V+M3OFm+O0AHsao557kExxa27lYEX7UYE06G/zC/Kyc=",
             Relocation.of("configurate", "ninja{}leaping{}configurate")
     ),
     CONFIGURATE_GSON(
-            "me{}lucko{}configurate",
+            "org{}spongepowered",
             "configurate-gson",
-            "3.5",
-            "Q3wp3xpqy41bJW3yUhbHOzm+NUkT4bUUBI2/AQLaa3c=",
+            "3.7",
+            "0JhMGX6mjY8MDCGGc7lrfoHvWbpGiE5R6N3nqJch+SU=",
             Relocation.of("configurate", "ninja{}leaping{}configurate")
     ),
     CONFIGURATE_YAML(
-            "me{}lucko{}configurate",
+            "org{}spongepowered",
             "configurate-yaml",
-            "3.5",
-            "Dxr1o3EPbpOOmwraqu+cors8O/nKwJnhS5EiPkTb3fc=",
+            "3.7",
+            "14L0JiDuAfQovxkNySeaf9Kul3Nkl0OaW49Ow4ReV8E=",
             Relocation.of("configurate", "ninja{}leaping{}configurate")
     ),
     SNAKEYAML(
@@ -245,25 +248,25 @@ public enum Dependency {
             Relocation.of("yaml", "org{}yaml{}snakeyaml")
     ),
     CONFIGURATE_HOCON(
-            "me{}lucko{}configurate",
+            "org{}spongepowered",
             "configurate-hocon",
-            "3.5",
-            "sOym1KPmQylGSfk90ZFqobuvoZfEWb7XMmMBwbHuxFw=",
+            "3.7",
+            "GYdqieCZVgPmoaIFjYN0YHuSVsHO7IsXZrwLAWqCgZM=",
             Relocation.of("configurate", "ninja{}leaping{}configurate"),
             Relocation.of("hocon", "com{}typesafe{}config")
     ),
     HOCON_CONFIG(
             "com{}typesafe",
             "config",
-            "1.3.3",
-            "tfHWBx8VSNBb6C9Z+QOcfTeheHvY48Z34x7ida9KRiE=",
+            "1.4.0",
+            "qtv9WlJFUb7vENP4kdMFuDuyfVRwPZpN56yioS2YR+I=",
             Relocation.of("hocon", "com{}typesafe{}config")
     ),
     CONFIGURATE_TOML(
             "me{}lucko{}configurate",
             "configurate-toml",
-            "3.5",
-            "U8p0XSTaNT/uebvLpO/vb6AhVGQDYiZsauSGB9zolPU=",
+            "3.7",
+            "EmyLOfsiR74QGhkktqhexMN8tC3kg1cM1UhM5MCmxuE=",
             Relocation.of("configurate", "ninja{}leaping{}configurate"),
             Relocation.of("toml4j", "com{}moandjiezana{}toml")
     ),
@@ -275,13 +278,11 @@ public enum Dependency {
             Relocation.of("toml4j", "com{}moandjiezana{}toml")
     );
 
-    private final List<URL> urls;
+    private final String mavenRepoPath;
     private final String version;
     private final byte[] checksum;
     private final List<Relocation> relocations;
 
-    private static final String MAVEN_CENTRAL_REPO = "https://repo1.maven.org/maven2/";
-    private static final String LUCK_MIRROR_REPO = "https://nexus.lucko.me/repository/maven-central/";
     private static final String MAVEN_FORMAT = "%s/%s/%s/%s-%s.jar";
 
     Dependency(String groupId, String artifactId, String version, String checksum) {
@@ -289,21 +290,13 @@ public enum Dependency {
     }
 
     Dependency(String groupId, String artifactId, String version, String checksum, Relocation... relocations) {
-        String path = String.format(MAVEN_FORMAT,
+        this.mavenRepoPath = String.format(MAVEN_FORMAT,
                 rewriteEscaping(groupId).replace(".", "/"),
                 rewriteEscaping(artifactId),
                 version,
                 rewriteEscaping(artifactId),
                 version
         );
-        try {
-            this.urls = ImmutableList.of(
-                    new URL(LUCK_MIRROR_REPO + path),
-                    new URL(MAVEN_CENTRAL_REPO + path)
-            );
-        } catch (MalformedURLException e) {
-            throw new RuntimeException(e); // propagate
-        }
         this.version = version;
         this.checksum = Base64.getDecoder().decode(checksum);
         this.relocations = ImmutableList.copyOf(relocations);
@@ -313,53 +306,38 @@ public enum Dependency {
         return s.replace("{}", ".");
     }
 
-    /*
-    public static void main(String[] args) throws Exception {
-        MessageDigest digest = MessageDigest.getInstance("SHA-256");
-
-        for (Dependency dependency : values()) {
-            List<byte[]> hashes = new ArrayList<>();
-            for (URL url : dependency.getUrls()) {
-                URLConnection connection = url.openConnection();
-                connection.setRequestProperty("User-Agent", "luckperms");
-
-                try (InputStream in = connection.getInputStream()) {
-                    byte[] bytes = ByteStreams.toByteArray(in);
-                    if (bytes.length == 0) {
-                        throw new RuntimeException("Empty stream");
-                    }
-
-                    hashes.add(digest.digest(bytes));
-                }
-            }
-
-            for (int i = 0; i < hashes.size(); i++) {
-                byte[] hash = hashes.get(i);
-                if (!Arrays.equals(hash, dependency.getChecksum())) {
-                    System.out.println("NO MATCH - REPO " + i + " - " + dependency.name() + ": " + Base64.getEncoder().encodeToString(hash));
-                }
-            }
-        }
-    }
-    */
-
     public String getFileName() {
         return name().toLowerCase().replace('_', '-') + "-" + this.version;
     }
 
-    public List<URL> getUrls() {
-        return this.urls;
-    }
-
-    public String getVersion() {
-        return this.version;
+    String getMavenRepoPath() {
+        return this.mavenRepoPath;
     }
 
     public byte[] getChecksum() {
         return this.checksum;
     }
 
+    public boolean checksumMatches(byte[] hash) {
+        return Arrays.equals(this.checksum, hash);
+    }
+
     public List<Relocation> getRelocations() {
         return this.relocations;
     }
+
+    /**
+     * Creates a {@link MessageDigest} suitable for computing the checksums
+     * of dependencies.
+     *
+     * @return the digest
+     */
+    public static MessageDigest createDigest() {
+        try {
+            return MessageDigest.getInstance("SHA-256");
+        } catch (NoSuchAlgorithmException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
 }

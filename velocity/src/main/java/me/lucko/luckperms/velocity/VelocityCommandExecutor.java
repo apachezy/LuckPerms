@@ -25,18 +25,26 @@
 
 package me.lucko.luckperms.velocity;
 
-import com.velocitypowered.api.command.Command;
-import com.velocitypowered.api.command.CommandSource;
+import com.velocitypowered.api.command.RawCommand;
+import com.velocitypowered.api.proxy.ConsoleCommandSource;
+import com.velocitypowered.api.proxy.ProxyServer;
 
 import me.lucko.luckperms.common.command.CommandManager;
 import me.lucko.luckperms.common.command.utils.ArgumentTokenizer;
 import me.lucko.luckperms.common.sender.Sender;
 
-import org.checkerframework.checker.nullness.qual.NonNull;
-
+import java.util.Arrays;
 import java.util.List;
 
-public class VelocityCommandExecutor extends CommandManager implements Command {
+public class VelocityCommandExecutor extends CommandManager implements RawCommand {
+    /* The command aliases */
+    private static final String PRIMARY_ALIAS = "luckpermsvelocity";
+    private static final String[] ALIASES = {"lpv", "vperm", "vperms", "vpermission", "vpermissions"};
+
+    /* The command aliases, prefixed with '/' */
+    private static final String SLASH_PRIMARY_ALIAS = "/luckpermsvelocity";
+    private static final String[] SLASH_ALIASES = Arrays.stream(ALIASES).map(s -> '/' + s).toArray(String[]::new);
+
     private final LPVelocityPlugin plugin;
 
     public VelocityCommandExecutor(LPVelocityPlugin plugin) {
@@ -44,17 +52,48 @@ public class VelocityCommandExecutor extends CommandManager implements Command {
         this.plugin = plugin;
     }
 
+    public void register() {
+        ProxyServer proxy = this.plugin.getBootstrap().getProxy();
+        proxy.getCommandManager().register(PRIMARY_ALIAS, this, ALIASES);
+
+        // register slash aliases so the console can run '/lpv' in the same way as 'lpv'.
+        proxy.getCommandManager().register(SLASH_PRIMARY_ALIAS, new ForwardingCommand(this) {
+            @Override
+            public boolean hasPermission(Invocation invocation) {
+                return invocation.source() instanceof ConsoleCommandSource;
+            }
+        }, SLASH_ALIASES);
+    }
+
     @Override
-    public void execute(@NonNull CommandSource source, @NonNull String[] args) {
-        Sender wrapped = this.plugin.getSenderFactory().wrap(source);
-        List<String> arguments = ArgumentTokenizer.EXECUTE.tokenizeInput(args);
+    public void execute(Invocation invocation) {
+        Sender wrapped = this.plugin.getSenderFactory().wrap(invocation.source());
+        List<String> arguments = ArgumentTokenizer.EXECUTE.tokenizeInput(invocation.arguments());
         executeCommand(wrapped, "lpv", arguments);
     }
 
     @Override
-    public List<String> suggest(@NonNull CommandSource source, @NonNull String[] args) {
-        Sender wrapped = this.plugin.getSenderFactory().wrap(source);
-        List<String> arguments = ArgumentTokenizer.TAB_COMPLETE.tokenizeInput(args);
+    public List<String> suggest(Invocation invocation) {
+        Sender wrapped = this.plugin.getSenderFactory().wrap(invocation.source());
+        List<String> arguments = ArgumentTokenizer.TAB_COMPLETE.tokenizeInput(invocation.arguments());
         return tabCompleteCommand(wrapped, arguments);
+    }
+
+    private static class ForwardingCommand implements RawCommand {
+        private final RawCommand delegate;
+
+        private ForwardingCommand(RawCommand delegate) {
+            this.delegate = delegate;
+        }
+
+        @Override
+        public void execute(Invocation invocation) {
+            this.delegate.execute(invocation);
+        }
+
+        @Override
+        public List<String> suggest(Invocation invocation) {
+            return this.delegate.suggest(invocation);
+        }
     }
 }

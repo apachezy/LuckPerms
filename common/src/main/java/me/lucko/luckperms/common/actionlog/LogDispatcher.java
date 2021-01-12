@@ -28,18 +28,41 @@ package me.lucko.luckperms.common.actionlog;
 import me.lucko.luckperms.common.command.access.CommandPermission;
 import me.lucko.luckperms.common.commands.log.LogNotify;
 import me.lucko.luckperms.common.config.ConfigKeys;
-import me.lucko.luckperms.common.locale.message.Message;
+import me.lucko.luckperms.common.locale.Message;
 import me.lucko.luckperms.common.plugin.LuckPermsPlugin;
 import me.lucko.luckperms.common.sender.Sender;
 
 import net.luckperms.api.event.log.LogBroadcastEvent;
 import net.luckperms.api.event.log.LogNotifyEvent;
 
+import java.util.Collection;
+import java.util.regex.Pattern;
+
 public class LogDispatcher {
     private final LuckPermsPlugin plugin;
 
     public LogDispatcher(LuckPermsPlugin plugin) {
         this.plugin = plugin;
+    }
+
+    private boolean shouldBroadcast(LoggedAction entry, LogBroadcastEvent.Origin origin) {
+        boolean cancelled = false;
+
+        if (!this.plugin.getConfiguration().get(ConfigKeys.LOG_NOTIFY)) {
+            cancelled = true;
+        } else if (origin == LogBroadcastEvent.Origin.REMOTE && !this.plugin.getConfiguration().get(ConfigKeys.BROADCAST_RECEIVED_LOG_ENTRIES)) {
+            cancelled = true;
+        } else {
+            Collection<Pattern> filters = this.plugin.getConfiguration().get(ConfigKeys.LOG_NOTIFY_FILTERED_DESCRIPTIONS);
+            for (Pattern filter : filters) {
+                if (filter.matcher(entry.getDescription()).matches()) {
+                    cancelled = true;
+                    break;
+                }
+            }
+        }
+
+        return !this.plugin.getEventDispatcher().dispatchLogBroadcast(cancelled, entry, origin);
     }
 
     private void broadcast(LoggedAction entry, LogNotifyEvent.Origin origin, Sender sender) {
@@ -49,12 +72,7 @@ public class LogDispatcher {
                     boolean shouldCancel = LogNotify.isIgnoring(this.plugin, s.getUniqueId()) || (sender != null && s.getUniqueId().equals(sender.getUniqueId()));
                     return !this.plugin.getEventDispatcher().dispatchLogNotify(shouldCancel, entry, origin, s);
                 })
-                .forEach(s -> Message.LOG.send(s,
-                        entry.getSourceFriendlyString(),
-                        Character.toString(LoggedAction.getTypeCharacter(entry.getTarget().getType())),
-                        entry.getTargetFriendlyString(),
-                        entry.getDescription()
-                ));
+                .forEach(s -> Message.LOG.send(s, entry));
     }
 
     public void dispatch(LoggedAction entry, Sender sender) {
@@ -64,9 +82,16 @@ public class LogDispatcher {
 
         this.plugin.getMessagingService().ifPresent(service -> service.pushLog(entry));
 
-        boolean shouldCancel = !this.plugin.getConfiguration().get(ConfigKeys.LOG_NOTIFY);
-        if (!this.plugin.getEventDispatcher().dispatchLogBroadcast(shouldCancel, entry, LogBroadcastEvent.Origin.LOCAL)) {
+        if (shouldBroadcast(entry, LogBroadcastEvent.Origin.LOCAL)) {
             broadcast(entry, LogNotifyEvent.Origin.LOCAL, sender);
+        }
+    }
+
+    public void broadcastFromApi(LoggedAction entry) {
+        this.plugin.getMessagingService().ifPresent(extendedMessagingService -> extendedMessagingService.pushLog(entry));
+
+        if (shouldBroadcast(entry, LogBroadcastEvent.Origin.LOCAL_API)) {
+            broadcast(entry, LogNotifyEvent.Origin.LOCAL_API, null);
         }
     }
 
@@ -75,25 +100,15 @@ public class LogDispatcher {
             try {
                 this.plugin.getStorage().logAction(entry).get();
             } catch (Exception e) {
-                e.printStackTrace();
+                this.plugin.getLogger().warn("Error whilst storing action", e);
             }
         }
 
         broadcastFromApi(entry);
     }
 
-    public void broadcastFromApi(LoggedAction entry) {
-        this.plugin.getMessagingService().ifPresent(extendedMessagingService -> extendedMessagingService.pushLog(entry));
-
-        boolean shouldCancel = !this.plugin.getConfiguration().get(ConfigKeys.LOG_NOTIFY);
-        if (!this.plugin.getEventDispatcher().dispatchLogBroadcast(shouldCancel, entry, LogBroadcastEvent.Origin.LOCAL_API)) {
-            broadcast(entry, LogNotifyEvent.Origin.LOCAL_API, null);
-        }
-    }
-
     public void dispatchFromRemote(LoggedAction entry) {
-        boolean shouldCancel = !this.plugin.getConfiguration().get(ConfigKeys.BROADCAST_RECEIVED_LOG_ENTRIES) || !this.plugin.getConfiguration().get(ConfigKeys.LOG_NOTIFY);
-        if (!this.plugin.getEventDispatcher().dispatchLogBroadcast(shouldCancel, entry, LogBroadcastEvent.Origin.REMOTE)) {
+        if (shouldBroadcast(entry, LogBroadcastEvent.Origin.REMOTE)) {
             broadcast(entry, LogNotifyEvent.Origin.REMOTE, null);
         }
     }

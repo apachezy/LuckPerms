@@ -26,10 +26,11 @@
 package me.lucko.luckperms.common.command.abstraction;
 
 import me.lucko.luckperms.common.command.CommandResult;
+import me.lucko.luckperms.common.command.spec.CommandSpec;
 import me.lucko.luckperms.common.command.tabcomplete.CompletionSupplier;
 import me.lucko.luckperms.common.command.tabcomplete.TabCompleter;
-import me.lucko.luckperms.common.locale.command.LocalizedCommandSpec;
-import me.lucko.luckperms.common.locale.message.Message;
+import me.lucko.luckperms.common.command.utils.ArgumentList;
+import me.lucko.luckperms.common.locale.Message;
 import me.lucko.luckperms.common.model.HolderType;
 import me.lucko.luckperms.common.model.PermissionHolder;
 import me.lucko.luckperms.common.plugin.LuckPermsPlugin;
@@ -51,14 +52,14 @@ public class GenericParentCommand<T extends PermissionHolder> extends ChildComma
 
     private final HolderType type;
 
-    public GenericParentCommand(LocalizedCommandSpec spec, String name, HolderType type, List<GenericChildCommand> children) {
+    public GenericParentCommand(CommandSpec spec, String name, HolderType type, List<GenericChildCommand> children) {
         super(spec, name, null, Predicates.alwaysFalse());
         this.children = children;
         this.type = type;
     }
 
     @Override
-    public CommandResult execute(LuckPermsPlugin plugin, Sender sender, T holder, List<String> args, String label) {
+    public CommandResult execute(LuckPermsPlugin plugin, Sender sender, T holder, ArgumentList args, String label) {
         if (args.isEmpty()) {
             sendUsageDetailed(sender, label);
             return CommandResult.INVALID_ARGS;
@@ -94,7 +95,7 @@ public class GenericParentCommand<T extends PermissionHolder> extends ChildComma
     }
 
     @Override
-    public List<String> tabComplete(LuckPermsPlugin plugin, Sender sender, List<String> args) {
+    public List<String> tabComplete(LuckPermsPlugin plugin, Sender sender, ArgumentList args) {
         return TabCompleter.create()
                 .at(0, CompletionSupplier.startsWith(() -> this.children.stream()
                         .filter(s -> s.isAuthorized(sender, this.type))

@@ -47,8 +47,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
@@ -61,14 +59,12 @@ public final class Track {
 
     private final LuckPermsPlugin plugin;
 
-    private final Lock ioLock = new ReentrantLock();
-
     /**
      * The groups within this track
      */
     private final List<String> groups = Collections.synchronizedList(new ArrayList<>());
 
-    private final ApiTrack apiDelegate = new ApiTrack(this);
+    private final ApiTrack apiProxy = new ApiTrack(this);
 
     public Track(String name, LuckPermsPlugin plugin) {
         this.name = name;
@@ -79,12 +75,8 @@ public final class Track {
         return this.name;
     }
 
-    public Lock getIoLock() {
-        return this.ioLock;
-    }
-
-    public ApiTrack getApiDelegate() {
-        return this.apiDelegate;
+    public ApiTrack getApiProxy() {
+        return this.apiProxy;
     }
 
     /**
@@ -275,7 +267,7 @@ public final class Track {
         }
 
         // find all groups that are inherited by the user in the exact contexts given and applicable to this track
-        List<InheritanceNode> nodes = user.normalData().immutableInheritance().get(context.immutableCopy()).stream()
+        List<InheritanceNode> nodes = user.normalData().inheritanceNodesInContext(context).stream()
                 .filter(Node::getValue)
                 .filter(node -> containsGroup(node.getGroupName()))
                 .distinct()
@@ -324,7 +316,7 @@ public final class Track {
         }
 
         user.unsetNode(DataType.NORMAL, oldNode);
-        user.setNode(DataType.NORMAL, Inheritance.builder(nextGroup.getName()).withContext(context).build(), true);
+        user.setNode(DataType.NORMAL, oldNode.toBuilder().group(nextGroup.getName()).build(), true);
 
         if (context.isEmpty() && user.getPrimaryGroup().getStoredValue().orElse(GroupManager.DEFAULT_GROUP_NAME).equalsIgnoreCase(old)) {
             user.getPrimaryGroup().setStoredValue(nextGroup.getName());
@@ -340,7 +332,7 @@ public final class Track {
         }
 
         // find all groups that are inherited by the user in the exact contexts given and applicable to this track
-        List<InheritanceNode> nodes = user.normalData().immutableInheritance().get(context.immutableCopy()).stream()
+        List<InheritanceNode> nodes = user.normalData().inheritanceNodesInContext(context).stream()
                 .filter(Node::getValue)
                 .filter(node -> containsGroup(node.getGroupName()))
                 .distinct()
@@ -378,7 +370,7 @@ public final class Track {
         }
 
         user.unsetNode(DataType.NORMAL, oldNode);
-        user.setNode(DataType.NORMAL, Inheritance.builder(previousGroup.getName()).withContext(context).build(), true);
+        user.setNode(DataType.NORMAL, oldNode.toBuilder().group(previousGroup.getName()).build(), true);
 
         if (context.isEmpty() && user.getPrimaryGroup().getStoredValue().orElse(GroupManager.DEFAULT_GROUP_NAME).equalsIgnoreCase(old)) {
             user.getPrimaryGroup().setStoredValue(previousGroup.getName());

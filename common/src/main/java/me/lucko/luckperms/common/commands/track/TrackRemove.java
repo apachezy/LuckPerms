@@ -28,14 +28,14 @@ package me.lucko.luckperms.common.commands.track;
 import me.lucko.luckperms.common.actionlog.LoggedAction;
 import me.lucko.luckperms.common.command.CommandResult;
 import me.lucko.luckperms.common.command.abstraction.ChildCommand;
+import me.lucko.luckperms.common.command.access.ArgumentPermissions;
 import me.lucko.luckperms.common.command.access.CommandPermission;
+import me.lucko.luckperms.common.command.spec.CommandSpec;
 import me.lucko.luckperms.common.command.tabcomplete.TabCompleter;
 import me.lucko.luckperms.common.command.tabcomplete.TabCompletions;
-import me.lucko.luckperms.common.command.utils.MessageUtils;
+import me.lucko.luckperms.common.command.utils.ArgumentList;
 import me.lucko.luckperms.common.command.utils.StorageAssistant;
-import me.lucko.luckperms.common.locale.LocaleManager;
-import me.lucko.luckperms.common.locale.command.CommandSpec;
-import me.lucko.luckperms.common.locale.message.Message;
+import me.lucko.luckperms.common.locale.Message;
 import me.lucko.luckperms.common.model.Track;
 import me.lucko.luckperms.common.plugin.LuckPermsPlugin;
 import me.lucko.luckperms.common.sender.Sender;
@@ -47,40 +47,45 @@ import net.luckperms.api.model.data.DataMutateResult;
 import java.util.List;
 
 public class TrackRemove extends ChildCommand<Track> {
-    public TrackRemove(LocaleManager locale) {
-        super(CommandSpec.TRACK_REMOVE.localize(locale), "remove", CommandPermission.TRACK_REMOVE, Predicates.not(1));
+    public TrackRemove() {
+        super(CommandSpec.TRACK_REMOVE, "remove", CommandPermission.TRACK_REMOVE, Predicates.not(1));
     }
 
     @Override
-    public CommandResult execute(LuckPermsPlugin plugin, Sender sender, Track track, List<String> args, String label) {
+    public CommandResult execute(LuckPermsPlugin plugin, Sender sender, Track target, ArgumentList args, String label) {
+        if (ArgumentPermissions.checkModifyPerms(plugin, sender, getPermission().get(), target)) {
+            Message.COMMAND_NO_PERMISSION.send(sender);
+            return CommandResult.NO_PERMISSION;
+        }
+
         String groupName = args.get(0).toLowerCase();
         if (!DataConstraints.GROUP_NAME_TEST.test(groupName)) {
             sendDetailedUsage(sender, label);
             return CommandResult.INVALID_ARGS;
         }
 
-        DataMutateResult result = track.removeGroup(groupName);
+        DataMutateResult result = target.removeGroup(groupName);
 
         if (result.wasSuccessful()) {
-            Message.TRACK_REMOVE_SUCCESS.send(sender, groupName, track.getName());
-            if (track.getGroups().size() > 1) {
-                Message.BLANK.send(sender, MessageUtils.listToArrowSep(track.getGroups()));
+            Message.TRACK_REMOVE_SUCCESS.send(sender, groupName, target.getName());
+            if (target.getGroups().size() > 1) {
+                Message.TRACK_PATH.send(sender, target.getGroups());
             }
 
-            LoggedAction.build().source(sender).target(track)
+            LoggedAction.build().source(sender).target(target)
                     .description("remove", groupName)
                     .build().submit(plugin, sender);
 
-            StorageAssistant.save(track, sender, plugin);
+            StorageAssistant.save(target, sender, plugin);
             return CommandResult.SUCCESS;
         } else {
-            Message.TRACK_DOES_NOT_CONTAIN.send(sender, track.getName(), groupName);
+            Message.TRACK_DOES_NOT_CONTAIN.send(sender, target.getName(), groupName);
             return CommandResult.STATE_ERROR;
         }
     }
 
     @Override
-    public List<String> tabComplete(LuckPermsPlugin plugin, Sender sender, List<String> args) {
+    public List<String> tabComplete(LuckPermsPlugin plugin, Sender sender, ArgumentList args) {
         return TabCompleter.create()
                 .at(0, TabCompletions.groups(plugin))
                 .complete(args);

@@ -26,11 +26,10 @@
 package me.lucko.luckperms.nukkit;
 
 import me.lucko.luckperms.common.api.LuckPermsApiProvider;
-import me.lucko.luckperms.common.api.implementation.ApiUser;
 import me.lucko.luckperms.common.calculator.CalculatorFactory;
 import me.lucko.luckperms.common.command.access.CommandPermission;
 import me.lucko.luckperms.common.config.ConfigKeys;
-import me.lucko.luckperms.common.config.adapter.ConfigurationAdapter;
+import me.lucko.luckperms.common.config.generic.adapter.ConfigurationAdapter;
 import me.lucko.luckperms.common.event.AbstractEventBus;
 import me.lucko.luckperms.common.messaging.MessagingFactory;
 import me.lucko.luckperms.common.model.User;
@@ -44,7 +43,7 @@ import me.lucko.luckperms.common.tasks.CacheHousekeepingTask;
 import me.lucko.luckperms.common.tasks.ExpireTemporaryTask;
 import me.lucko.luckperms.nukkit.calculator.NukkitCalculatorFactory;
 import me.lucko.luckperms.nukkit.context.NukkitContextManager;
-import me.lucko.luckperms.nukkit.context.WorldCalculator;
+import me.lucko.luckperms.nukkit.context.NukkitPlayerCalculator;
 import me.lucko.luckperms.nukkit.inject.PermissionDefault;
 import me.lucko.luckperms.nukkit.inject.permissible.LuckPermsPermissible;
 import me.lucko.luckperms.nukkit.inject.permissible.PermissibleInjector;
@@ -55,11 +54,11 @@ import me.lucko.luckperms.nukkit.inject.server.InjectorSubscriptionMap;
 import me.lucko.luckperms.nukkit.inject.server.LuckPermsDefaultsMap;
 import me.lucko.luckperms.nukkit.inject.server.LuckPermsPermissionMap;
 import me.lucko.luckperms.nukkit.inject.server.LuckPermsSubscriptionMap;
+import me.lucko.luckperms.nukkit.listeners.NukkitAutoOpListener;
 import me.lucko.luckperms.nukkit.listeners.NukkitConnectionListener;
 import me.lucko.luckperms.nukkit.listeners.NukkitPlatformListener;
 
 import net.luckperms.api.LuckPerms;
-import net.luckperms.api.event.user.UserDataRecalculateEvent;
 import net.luckperms.api.query.QueryOptions;
 
 import cn.nukkit.Player;
@@ -125,9 +124,9 @@ public class LPNukkitPlugin extends AbstractLuckPermsPlugin {
 
     @Override
     protected void registerCommands() {
-        this.commandManager = new NukkitCommandExecutor(this);
-        PluginCommand<?> cmd = (PluginCommand<?>) this.bootstrap.getServer().getPluginCommand("luckperms");
-        cmd.setExecutor(this.commandManager);
+        PluginCommand<?> command = (PluginCommand<?>) this.bootstrap.getServer().getPluginCommand("luckperms");
+        this.commandManager = new NukkitCommandExecutor(this, command);
+        this.commandManager.register();
     }
 
     @Override
@@ -145,7 +144,10 @@ public class LPNukkitPlugin extends AbstractLuckPermsPlugin {
     @Override
     protected void setupContextManager() {
         this.contextManager = new NukkitContextManager(this);
-        this.contextManager.registerCalculator(new WorldCalculator(this));
+
+        NukkitPlayerCalculator playerCalculator = new NukkitPlayerCalculator(this);
+        this.bootstrap.getServer().getPluginManager().registerEvents(playerCalculator, this.bootstrap);
+        this.contextManager.registerCalculator(playerCalculator);
     }
 
     @Override
@@ -205,11 +207,7 @@ public class LPNukkitPlugin extends AbstractLuckPermsPlugin {
 
         // register autoop listener
         if (getConfiguration().get(ConfigKeys.AUTO_OP)) {
-            getApiProvider().getEventBus().subscribe(UserDataRecalculateEvent.class, event -> {
-                User user = ApiUser.cast(event.getUser());
-                Optional<Player> player = getBootstrap().getPlayer(user.getUniqueId());
-                player.ifPresent(this::refreshAutoOp);
-            });
+            getApiProvider().getEventBus().subscribe(new NukkitAutoOpListener(this));
         }
 
         // Load any online users (in the case of a reload)
@@ -223,12 +221,13 @@ public class LPNukkitPlugin extends AbstractLuckPermsPlugin {
                                 LuckPermsPermissible lpPermissible = new LuckPermsPermissible(player, user, this);
                                 PermissibleInjector.inject(player, lpPermissible);
                             } catch (Throwable t) {
-                                t.printStackTrace();
+                                getLogger().severe("Exception thrown when setting up permissions for " +
+                                        player.getUniqueId() + " - " + player.getName(), t);
                             }
                         });
                     }
                 } catch (Exception e) {
-                    e.printStackTrace();
+                    getLogger().severe("Exception occurred whilst loading data for " + player.getUniqueId() + " - " + player.getName(), e);
                 }
             });
         }
@@ -241,7 +240,8 @@ public class LPNukkitPlugin extends AbstractLuckPermsPlugin {
             try {
                 PermissibleInjector.uninject(player, false);
             } catch (Exception e) {
-                e.printStackTrace();
+                getLogger().severe("Exception thrown when unloading permissions from " +
+                        player.getUniqueId() + " - " + player.getName(), e);
             }
 
             if (getConfiguration().get(ConfigKeys.AUTO_OP)) {

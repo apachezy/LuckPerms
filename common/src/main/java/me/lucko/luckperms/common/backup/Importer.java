@@ -31,7 +31,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
-import me.lucko.luckperms.common.locale.message.Message;
+import me.lucko.luckperms.common.locale.Message;
 import me.lucko.luckperms.common.model.Group;
 import me.lucko.luckperms.common.model.Track;
 import me.lucko.luckperms.common.model.User;
@@ -44,6 +44,7 @@ import net.luckperms.api.model.data.DataType;
 import net.luckperms.api.node.Node;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -66,8 +67,9 @@ public class Importer implements Runnable {
     private final LuckPermsPlugin plugin;
     private final Set<Sender> notify;
     private final JsonObject data;
+    private final boolean merge;
 
-    public Importer(LuckPermsPlugin plugin, Sender executor, JsonObject data) {
+    public Importer(LuckPermsPlugin plugin, Sender executor, JsonObject data, boolean merge) {
         this.plugin = plugin;
 
         if (executor.isConsole()) {
@@ -76,6 +78,7 @@ public class Importer implements Runnable {
             this.notify = ImmutableSet.of(executor, plugin.getConsoleSender());
         }
         this.data = data;
+        this.merge = merge;
     }
 
     private static final class UserData {
@@ -92,7 +95,11 @@ public class Importer implements Runnable {
 
     private void processGroup(String groupName, Set<Node> nodes) {
         Group group = this.plugin.getStorage().createAndLoadGroup(groupName, CreationCause.INTERNAL).join();
-        group.setNodes(DataType.NORMAL, nodes);
+        if (this.merge) {
+            group.mergeNodes(DataType.NORMAL, nodes);
+        } else {
+            group.setNodes(DataType.NORMAL, nodes);
+        }
         this.plugin.getStorage().saveGroup(group);
     }
 
@@ -107,15 +114,27 @@ public class Importer implements Runnable {
         if (userData.primaryGroup != null) {
             user.getPrimaryGroup().setStoredValue(userData.primaryGroup);
         }
-        user.setNodes(DataType.NORMAL, userData.nodes);
+        if (this.merge) {
+            user.mergeNodes(DataType.NORMAL, userData.nodes);
+        } else {
+            user.setNodes(DataType.NORMAL, userData.nodes);
+        }
         this.plugin.getStorage().saveUser(user).join();
         this.plugin.getUserManager().getHouseKeeper().cleanup(user.getUniqueId());
+    }
+
+    private Set<Map.Entry<String, JsonElement>> getDataSection(String id) {
+        if (this.data.has(id)) {
+            return this.data.get(id).getAsJsonObject().entrySet();
+        } else {
+            return Collections.emptySet();
+        }
     }
 
     @Override
     public void run() {
         long startTime = System.currentTimeMillis();
-        this.notify.forEach(s -> Message.IMPORT_START.send(s));
+        this.notify.forEach(Message.IMPORT_START::send);
 
         // start an update task in the background - we'll #join this later
         CompletableFuture<Void> updateTask = CompletableFuture.runAsync(() -> this.plugin.getSyncTaskBuffer().requestDirectly());
@@ -126,16 +145,16 @@ public class Importer implements Runnable {
         Map<String, List<String>> tracks = new HashMap<>();
         Map<UUID, UserData> users = new HashMap<>();
 
-        for (Map.Entry<String, JsonElement> group : this.data.get("groups").getAsJsonObject().entrySet()) {
+        for (Map.Entry<String, JsonElement> group : getDataSection("groups")) {
             groups.put(group.getKey(), NodeJsonSerializer.deserializeNodes(group.getValue().getAsJsonObject().get("nodes").getAsJsonArray()));
         }
-        for (Map.Entry<String, JsonElement> track : this.data.get("tracks").getAsJsonObject().entrySet()) {
+        for (Map.Entry<String, JsonElement> track : getDataSection("tracks")) {
             JsonArray trackGroups = track.getValue().getAsJsonObject().get("groups").getAsJsonArray();
             List<String> trackGroupsList = new ArrayList<>();
             trackGroups.forEach(g -> trackGroupsList.add(g.getAsString()));
             tracks.put(track.getKey(), trackGroupsList);
         }
-        for (Map.Entry<String, JsonElement> user : this.data.get("users").getAsJsonObject().entrySet()) {
+        for (Map.Entry<String, JsonElement> user : getDataSection("users")) {
             JsonObject jsonData = user.getValue().getAsJsonObject();
 
             UUID uuid = UUID.fromString(user.getKey());
@@ -223,7 +242,7 @@ public class Importer implements Runnable {
 
     private void sendProgress(int processedCount, int total) {
         int percent = (processedCount * 100) / total;
-        this.notify.forEach(s -> Message.IMPORT_PROGRESS.send(s, percent, processedCount, total, 0));
+        this.notify.forEach(s -> Message.IMPORT_PROGRESS.send(s, percent, processedCount, total));
     }
 
 }

@@ -28,12 +28,13 @@ package me.lucko.luckperms.common.commands.group;
 import me.lucko.luckperms.common.actionlog.LoggedAction;
 import me.lucko.luckperms.common.command.CommandResult;
 import me.lucko.luckperms.common.command.abstraction.SingleCommand;
+import me.lucko.luckperms.common.command.access.ArgumentPermissions;
 import me.lucko.luckperms.common.command.access.CommandPermission;
+import me.lucko.luckperms.common.command.spec.CommandSpec;
 import me.lucko.luckperms.common.command.tabcomplete.TabCompleter;
 import me.lucko.luckperms.common.command.tabcomplete.TabCompletions;
-import me.lucko.luckperms.common.locale.LocaleManager;
-import me.lucko.luckperms.common.locale.command.CommandSpec;
-import me.lucko.luckperms.common.locale.message.Message;
+import me.lucko.luckperms.common.command.utils.ArgumentList;
+import me.lucko.luckperms.common.locale.Message;
 import me.lucko.luckperms.common.model.Group;
 import me.lucko.luckperms.common.model.manager.group.GroupManager;
 import me.lucko.luckperms.common.plugin.LuckPermsPlugin;
@@ -46,12 +47,12 @@ import net.luckperms.api.event.cause.DeletionCause;
 import java.util.List;
 
 public class DeleteGroup extends SingleCommand {
-    public DeleteGroup(LocaleManager locale) {
-        super(CommandSpec.DELETE_GROUP.localize(locale), "DeleteGroup", CommandPermission.DELETE_GROUP, Predicates.not(1));
+    public DeleteGroup() {
+        super(CommandSpec.DELETE_GROUP, "DeleteGroup", CommandPermission.DELETE_GROUP, Predicates.not(1));
     }
 
     @Override
-    public CommandResult execute(LuckPermsPlugin plugin, Sender sender, List<String> args, String label) {
+    public CommandResult execute(LuckPermsPlugin plugin, Sender sender, ArgumentList args, String label) {
         if (args.isEmpty()) {
             sendUsage(sender, label);
             return CommandResult.INVALID_ARGS;
@@ -70,10 +71,15 @@ public class DeleteGroup extends SingleCommand {
             return CommandResult.LOADING_ERROR;
         }
 
+        if (ArgumentPermissions.checkModifyPerms(plugin, sender, getPermission().get(), group)) {
+            Message.COMMAND_NO_PERMISSION.send(sender);
+            return CommandResult.NO_PERMISSION;
+        }
+
         try {
             plugin.getStorage().deleteGroup(group, DeletionCause.COMMAND).get();
         } catch (Exception e) {
-            e.printStackTrace();
+            plugin.getLogger().warn("Error whilst deleting group", e);
             Message.DELETE_ERROR.send(sender, group.getFormattedDisplayName());
             return CommandResult.FAILURE;
         }
@@ -89,7 +95,7 @@ public class DeleteGroup extends SingleCommand {
     }
 
     @Override
-    public List<String> tabComplete(LuckPermsPlugin plugin, Sender sender, List<String> args) {
+    public List<String> tabComplete(LuckPermsPlugin plugin, Sender sender, ArgumentList args) {
         return TabCompleter.create()
                 .at(0, TabCompletions.groups(plugin))
                 .complete(args);

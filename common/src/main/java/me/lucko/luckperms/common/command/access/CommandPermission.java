@@ -35,8 +35,8 @@ public enum CommandPermission {
     SYNC("sync", Type.NONE),
     INFO("info", Type.NONE),
     EDITOR("editor", Type.NONE),
-    DEBUG("debug", Type.NONE),
     VERBOSE("verbose", Type.NONE),
+    VERBOSE_COMMAND_OTHERS("verbose.command.others", Type.NONE),
     TREE("tree", Type.NONE),
     SEARCH("search", Type.NONE),
     CHECK("check", Type.NONE),
@@ -45,7 +45,7 @@ public enum CommandPermission {
     RELOAD_CONFIG("reloadconfig", Type.NONE),
     BULK_UPDATE("bulkupdate", Type.NONE),
     APPLY_EDITS("applyedits", Type.NONE),
-    MIGRATION("migration", Type.NONE),
+    TRANSLATIONS("translations", Type.NONE),
 
     CREATE_GROUP("creategroup", Type.NONE),
     DELETE_GROUP("deletegroup", Type.NONE),

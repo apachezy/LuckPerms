@@ -32,9 +32,9 @@ import me.lucko.luckperms.common.cache.LoadingMap;
 import me.lucko.luckperms.common.context.ContextManager;
 import me.lucko.luckperms.common.util.Predicates;
 import me.lucko.luckperms.sponge.LPSpongePlugin;
-import me.lucko.luckperms.sponge.context.SpongeProxiedContextCalculator;
 import me.lucko.luckperms.sponge.model.manager.SpongeGroupManager;
 import me.lucko.luckperms.sponge.model.manager.SpongeUserManager;
+import me.lucko.luckperms.sponge.service.model.ContextCalculatorProxy;
 import me.lucko.luckperms.sponge.service.model.LPPermissionDescription;
 import me.lucko.luckperms.sponge.service.model.LPPermissionService;
 import me.lucko.luckperms.sponge.service.model.LPSubject;
@@ -46,6 +46,7 @@ import me.lucko.luckperms.sponge.service.model.persisted.PersistedCollection;
 import me.lucko.luckperms.sponge.service.model.persisted.SubjectStorage;
 import me.lucko.luckperms.sponge.service.reference.SubjectReferenceFactory;
 
+import org.spongepowered.api.entity.living.player.Player;
 import org.spongepowered.api.plugin.PluginContainer;
 import org.spongepowered.api.service.context.ContextCalculator;
 import org.spongepowered.api.service.permission.PermissionService;
@@ -143,7 +144,7 @@ public class LuckPermsService implements LPPermissionService {
     }
 
     @Override
-    public ContextManager<Subject> getContextManager() {
+    public ContextManager<Subject, Player> getContextManager() {
         return this.plugin.getContextManager();
     }
 
@@ -225,7 +226,7 @@ public class LuckPermsService implements LPPermissionService {
     @Override
     public void registerContextCalculator(ContextCalculator<Subject> calculator) {
         Objects.requireNonNull(calculator);
-        this.plugin.getContextManager().registerCalculator(new SpongeProxiedContextCalculator(calculator));
+        this.plugin.getContextManager().registerCalculator(new ContextCalculatorProxy(calculator));
     }
 
     @Override

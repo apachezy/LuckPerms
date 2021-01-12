@@ -27,7 +27,9 @@ package me.lucko.luckperms.common.backup;
 
 import com.google.gson.JsonObject;
 
-import me.lucko.luckperms.common.locale.message.Message;
+import me.lucko.luckperms.common.http.AbstractHttpClient;
+import me.lucko.luckperms.common.http.UnsuccessfulRequestException;
+import me.lucko.luckperms.common.locale.Message;
 import me.lucko.luckperms.common.model.Group;
 import me.lucko.luckperms.common.model.Track;
 import me.lucko.luckperms.common.model.User;
@@ -36,14 +38,17 @@ import me.lucko.luckperms.common.node.utils.NodeJsonSerializer;
 import me.lucko.luckperms.common.plugin.LuckPermsPlugin;
 import me.lucko.luckperms.common.sender.Sender;
 import me.lucko.luckperms.common.storage.Storage;
-import me.lucko.luckperms.common.util.ProgressLogger;
 import me.lucko.luckperms.common.util.gson.GsonProvider;
 import me.lucko.luckperms.common.util.gson.JArray;
 import me.lucko.luckperms.common.util.gson.JObject;
 
+import net.kyori.adventure.text.Component;
+
 import java.io.BufferedWriter;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
+import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -71,55 +76,51 @@ import java.util.zip.GZIPOutputStream;
 /**
  * Handles export operations
  */
-public class Exporter implements Runnable {
+public abstract class Exporter implements Runnable {
     private static final SimpleDateFormat DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss z");
 
-    private final LuckPermsPlugin plugin;
+    protected final LuckPermsPlugin plugin;
     private final Sender executor;
-    private final Path filePath;
     private final boolean includeUsers;
-    private final ProgressLogger log;
+    private final boolean includeGroups;
+    protected final ProgressLogger log;
 
-    public Exporter(LuckPermsPlugin plugin, Sender executor, Path filePath, boolean includeUsers) {
+    protected Exporter(LuckPermsPlugin plugin, Sender executor, boolean includeUsers, boolean includeGroups) {
         this.plugin = plugin;
         this.executor = executor;
-        this.filePath = filePath;
         this.includeUsers = includeUsers;
+        this.includeGroups = includeGroups;
 
-        this.log = new ProgressLogger(Message.EXPORT_LOG, Message.EXPORT_LOG_PROGRESS, null);
+        this.log = new ProgressLogger();
         this.log.addListener(plugin.getConsoleSender());
         this.log.addListener(executor);
     }
 
     @Override
     public void run() {
-        JsonObject file = new JsonObject();
-        file.add("metadata", new JObject()
+        JsonObject json = new JsonObject();
+        json.add("metadata", new JObject()
                 .add("generatedBy", this.executor.getNameWithLocation())
                 .add("generatedAt", DATE_FORMAT.format(new Date(System.currentTimeMillis())))
                 .toJson());
 
-        this.log.log("Gathering group data...");
-        file.add("groups", exportGroups());
+        if (this.includeGroups) {
+            this.log.log("Gathering group data...");
+            json.add("groups", exportGroups());
 
-        this.log.log("Gathering track data...");
-        file.add("tracks", exportTracks());
+            this.log.log("Gathering track data...");
+            json.add("tracks", exportTracks());
+        }
 
         if (this.includeUsers) {
             this.log.log("Gathering user data...");
-            file.add("users", exportUsers());
+            json.add("users", exportUsers());
         }
 
-        this.log.log("Finished gathering data, writing file...");
-
-        try (BufferedWriter out = new BufferedWriter(new OutputStreamWriter(new GZIPOutputStream(Files.newOutputStream(this.filePath)), StandardCharsets.UTF_8))) {
-            GsonProvider.prettyPrinting().toJson(file, out);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-
-        this.log.getListeners().forEach(l -> Message.LOG_EXPORT_SUCCESS.send(l, this.filePath.toFile().getAbsolutePath()));
+        processOutput(json);
     }
+
+    protected abstract void processOutput(JsonObject json);
 
     private JsonObject exportGroups() {
         JsonObject out = new JsonObject();
@@ -203,7 +204,7 @@ public class Exporter implements Runnable {
                 break;
             } catch (TimeoutException e) {
                 // still executing - send a progress report and continue waiting
-                this.log.logAllProgress("Exported {} users so far.", userCount.get());
+                this.log.logProgress("Exported " + userCount.get() + " users so far.");
                 continue;
             }
 
@@ -218,5 +219,85 @@ public class Exporter implements Runnable {
             outJson.add(entry.getKey().toString(), entry.getValue());
         }
         return outJson;
+    }
+
+    public static final class SaveFile extends Exporter {
+        private final Path filePath;
+
+        public SaveFile(LuckPermsPlugin plugin, Sender executor, Path filePath, boolean includeUsers, boolean includeGroups) {
+            super(plugin, executor, includeUsers, includeGroups);
+            this.filePath = filePath;
+        }
+
+        @Override
+        protected void processOutput(JsonObject json) {
+            this.log.log("Finished gathering data, writing file...");
+
+            try (BufferedWriter out = new BufferedWriter(new OutputStreamWriter(new GZIPOutputStream(Files.newOutputStream(this.filePath)), StandardCharsets.UTF_8))) {
+                GsonProvider.prettyPrinting().toJson(json, out);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+
+            this.log.getListeners().forEach(l -> Message.EXPORT_FILE_SUCCESS.send(l, this.filePath.toFile().getAbsolutePath()));
+        }
+    }
+
+    public static final class WebUpload extends Exporter {
+        private final String label;
+
+        public WebUpload(LuckPermsPlugin plugin, Sender executor, boolean includeUsers, boolean includeGroups, String label) {
+            super(plugin, executor, includeUsers, includeGroups);
+            this.label = label;
+        }
+
+        @Override
+        protected void processOutput(JsonObject json) {
+            this.log.log("Finished gathering data, uploading data...");
+
+            ByteArrayOutputStream bytesOut = new ByteArrayOutputStream();
+            try (Writer writer = new OutputStreamWriter(new GZIPOutputStream(bytesOut), StandardCharsets.UTF_8)) {
+                GsonProvider.prettyPrinting().toJson(json, writer);
+            } catch (IOException e) {
+                this.plugin.getLogger().severe("Error compressing data", e);
+            }
+
+            try {
+                String pasteId = this.plugin.getBytebin().postContent(bytesOut.toByteArray(), AbstractHttpClient.JSON_TYPE).key();
+                this.log.getListeners().forEach(l -> Message.EXPORT_WEB_SUCCESS.send(l, pasteId, this.label));
+            } catch (UnsuccessfulRequestException e) {
+                this.log.getListeners().forEach(l -> Message.HTTP_REQUEST_FAILURE.send(l, e.getResponse().code(), e.getResponse().message()));
+            } catch (IOException e) {
+                this.plugin.getLogger().severe("Error uploading data to bytebin", e);
+                this.log.getListeners().forEach(Message.HTTP_UNKNOWN_FAILURE::send);
+            }
+        }
+    }
+
+    private static final class ProgressLogger {
+        private final Set<Sender> listeners = new HashSet<>();
+
+        public void addListener(Sender sender) {
+            this.listeners.add(sender);
+        }
+
+        public Set<Sender> getListeners() {
+            return this.listeners;
+        }
+
+        public void log(String msg) {
+            dispatchMessage(Message.EXPORT_LOG, msg);
+        }
+
+        public void logProgress(String msg) {
+            dispatchMessage(Message.EXPORT_LOG_PROGRESS, msg);
+        }
+
+        private void dispatchMessage(Message.Args1<String> messageType, String content) {
+            final Component message = messageType.build(content);
+            for (Sender s : this.listeners) {
+                s.sendMessage(message);
+            }
+        }
     }
 }

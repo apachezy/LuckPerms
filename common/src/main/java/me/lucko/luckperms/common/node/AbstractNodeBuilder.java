@@ -28,7 +28,6 @@ package me.lucko.luckperms.common.node;
 import me.lucko.luckperms.common.context.contextset.ImmutableContextSetImpl;
 
 import net.luckperms.api.context.ContextSet;
-import net.luckperms.api.context.DefaultContextKeys;
 import net.luckperms.api.context.ImmutableContextSet;
 import net.luckperms.api.node.NodeBuilder;
 import net.luckperms.api.node.ScopedNode;
@@ -118,10 +117,6 @@ public abstract class AbstractNodeBuilder<N extends ScopedNode<N, B>, B extends 
 
     @Override
     public @NonNull B withContext(@NonNull String key, @NonNull String value) {
-        // TODO reconsider a better place to insert / avoid this special case
-        if ((key.equalsIgnoreCase(DefaultContextKeys.SERVER_KEY) || key.equalsIgnoreCase(DefaultContextKeys.WORLD_KEY)) && value.equalsIgnoreCase("global")) {
-            return (B) this;
-        }
         this.context.add(key, value);
         return (B) this;
     }

@@ -26,10 +26,11 @@
 package me.lucko.luckperms.common.command.abstraction;
 
 import me.lucko.luckperms.common.command.CommandResult;
+import me.lucko.luckperms.common.command.spec.CommandSpec;
 import me.lucko.luckperms.common.command.tabcomplete.CompletionSupplier;
 import me.lucko.luckperms.common.command.tabcomplete.TabCompleter;
-import me.lucko.luckperms.common.locale.command.LocalizedCommandSpec;
-import me.lucko.luckperms.common.locale.message.Message;
+import me.lucko.luckperms.common.command.utils.ArgumentList;
+import me.lucko.luckperms.common.locale.Message;
 import me.lucko.luckperms.common.plugin.LuckPermsPlugin;
 import me.lucko.luckperms.common.sender.Sender;
 import me.lucko.luckperms.common.util.Predicates;
@@ -48,7 +49,7 @@ public abstract class ParentCommand<T, I> extends Command<Void> {
     /** The type of parent command */
     private final Type type;
 
-    public ParentCommand(LocalizedCommandSpec spec, String name, Type type, List<Command<T>> children) {
+    public ParentCommand(CommandSpec spec, String name, Type type, List<Command<T>> children) {
         super(spec, name, null, Predicates.alwaysFalse());
         this.children = children;
         this.type = type;
@@ -59,7 +60,7 @@ public abstract class ParentCommand<T, I> extends Command<Void> {
     }
 
     @Override
-    public CommandResult execute(LuckPermsPlugin plugin, Sender sender, Void ignored, List<String> args, String label) {
+    public CommandResult execute(LuckPermsPlugin plugin, Sender sender, Void ignored, ArgumentList args, String label) {
         // check if required argument and/or subcommand is missing
         if (args.size() < this.type.minArgs) {
             sendUsage(sender, label);
@@ -118,7 +119,7 @@ public abstract class ParentCommand<T, I> extends Command<Void> {
     }
 
     @Override
-    public List<String> tabComplete(LuckPermsPlugin plugin, Sender sender, List<String> args) {
+    public List<String> tabComplete(LuckPermsPlugin plugin, Sender sender, ArgumentList args) {
         switch (this.type) {
             case TAKES_ARGUMENT_FOR_TARGET:
                 return TabCompleter.create()

@@ -29,17 +29,20 @@ import com.google.common.collect.ImmutableMap;
 
 import me.lucko.luckperms.common.actionlog.Log;
 import me.lucko.luckperms.common.bulkupdate.BulkUpdate;
-import me.lucko.luckperms.common.bulkupdate.comparison.Constraint;
+import me.lucko.luckperms.common.locale.Message;
 import me.lucko.luckperms.common.model.Group;
 import me.lucko.luckperms.common.model.Track;
 import me.lucko.luckperms.common.model.User;
+import me.lucko.luckperms.common.node.matcher.ConstraintNodeMatcher;
 import me.lucko.luckperms.common.plugin.LuckPermsPlugin;
 import me.lucko.luckperms.common.storage.StorageType;
 import me.lucko.luckperms.common.storage.implementation.StorageImplementation;
+import me.lucko.luckperms.common.storage.misc.NodeEntry;
 
+import net.kyori.adventure.text.Component;
 import net.luckperms.api.actionlog.Action;
 import net.luckperms.api.model.PlayerSaveResult;
-import net.luckperms.api.node.HeldNode;
+import net.luckperms.api.node.Node;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -47,6 +50,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 public class SplitStorage implements StorageImplementation {
     private final LuckPermsPlugin plugin;
@@ -99,15 +103,20 @@ public class SplitStorage implements StorageImplementation {
             try {
                 ds.shutdown();
             } catch (Exception e) {
-                e.printStackTrace();
+                this.plugin.getLogger().severe("Exception whilst disabling " + ds + " storage", e);
             }
         }
     }
 
     @Override
-    public Map<String, String> getMeta() {
-        Map<String, String> meta = new LinkedHashMap<>();
-        meta.put("Types", this.types.toString());
+    public Map<Component, Component> getMeta() {
+        Map<Component, Component> meta = new LinkedHashMap<>();
+        meta.put(
+                Component.translatable("luckperms.command.info.storage.meta.split-types-key"),
+                Message.formatStringList(this.types.entrySet().stream()
+                        .map(e -> e.getKey().toString().toLowerCase() + "->" + e.getValue().getName().toLowerCase())
+                        .collect(Collectors.toList()))
+        );
         for (StorageImplementation backing : this.implementations.values()) {
             meta.putAll(backing.getMeta());
         }
@@ -153,8 +162,8 @@ public class SplitStorage implements StorageImplementation {
     }
 
     @Override
-    public List<HeldNode<UUID>> getUsersWithPermission(Constraint constraint) throws Exception {
-        return implFor(SplitStorageType.USER).getUsersWithPermission(constraint);
+    public <N extends Node> List<NodeEntry<UUID, N>> searchUserNodes(ConstraintNodeMatcher<N> constraint) throws Exception {
+        return implFor(SplitStorageType.USER).searchUserNodes(constraint);
     }
 
     @Override
@@ -183,8 +192,8 @@ public class SplitStorage implements StorageImplementation {
     }
 
     @Override
-    public List<HeldNode<String>> getGroupsWithPermission(Constraint constraint) throws Exception {
-        return implFor(SplitStorageType.GROUP).getGroupsWithPermission(constraint);
+    public <N extends Node> List<NodeEntry<String, N>> searchGroupNodes(ConstraintNodeMatcher<N> constraint) throws Exception {
+        return implFor(SplitStorageType.GROUP).searchGroupNodes(constraint);
     }
 
     @Override
@@ -215,6 +224,11 @@ public class SplitStorage implements StorageImplementation {
     @Override
     public PlayerSaveResult savePlayerData(UUID uniqueId, String username) throws Exception {
         return implFor(SplitStorageType.UUID).savePlayerData(uniqueId, username);
+    }
+
+    @Override
+    public void deletePlayerData(UUID uniqueId) throws Exception {
+        implFor(SplitStorageType.UUID).deletePlayerData(uniqueId);
     }
 
     @Override

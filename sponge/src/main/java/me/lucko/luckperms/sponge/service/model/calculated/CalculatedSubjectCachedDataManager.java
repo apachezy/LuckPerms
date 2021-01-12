@@ -34,12 +34,12 @@ import me.lucko.luckperms.common.calculator.CalculatorFactory;
 import me.lucko.luckperms.common.calculator.PermissionCalculator;
 import me.lucko.luckperms.common.calculator.processor.MapProcessor;
 import me.lucko.luckperms.common.calculator.processor.PermissionProcessor;
+import me.lucko.luckperms.common.calculator.processor.SpongeWildcardProcessor;
 import me.lucko.luckperms.common.calculator.processor.WildcardProcessor;
 import me.lucko.luckperms.common.metastacking.SimpleMetaStackDefinition;
 import me.lucko.luckperms.common.metastacking.StandardStackElements;
 import me.lucko.luckperms.common.plugin.LuckPermsPlugin;
 import me.lucko.luckperms.sponge.calculator.FixedDefaultsProcessor;
-import me.lucko.luckperms.sponge.calculator.SpongeWildcardProcessor;
 
 import net.luckperms.api.metastacking.DuplicateRemovalFunction;
 import net.luckperms.api.metastacking.MetaStackDefinition;
@@ -47,6 +47,7 @@ import net.luckperms.api.node.ChatMetaType;
 import net.luckperms.api.query.QueryOptions;
 
 import java.util.Map;
+import java.util.function.IntFunction;
 
 public class CalculatedSubjectCachedDataManager extends AbstractCachedDataManager implements CalculatorFactory {
     private static final MetaStackDefinition DEFAULT_META_STACK = new SimpleMetaStackDefinition(
@@ -68,6 +69,11 @@ public class CalculatedSubjectCachedDataManager extends AbstractCachedDataManage
     }
 
     @Override
+    protected QueryOptions getQueryOptions() {
+        return this.subject.sponge().getQueryOptions();
+    }
+
+    @Override
     protected CalculatorFactory getCalculatorFactory() {
         return this;
     }
@@ -78,8 +84,10 @@ public class CalculatedSubjectCachedDataManager extends AbstractCachedDataManage
     }
 
     @Override
-    protected Map<String, Boolean> resolvePermissions(QueryOptions queryOptions) {
-        return this.subject.resolveAllPermissions(queryOptions);
+    protected <M extends Map<String, Boolean>> M resolvePermissions(IntFunction<M> mapFactory, QueryOptions queryOptions) {
+        M map = mapFactory.apply(16);
+        this.subject.resolveAllPermissions(map, queryOptions);
+        return map;
     }
 
     @Override
@@ -95,7 +103,7 @@ public class CalculatedSubjectCachedDataManager extends AbstractCachedDataManage
         processors.add(new WildcardProcessor());
 
         if (!this.subject.getParentCollection().isDefaultsCollection()) {
-            processors.add(new FixedDefaultsProcessor(this.subject.getService(), queryOptions, this.subject.getDefaults()));
+            processors.add(new FixedDefaultsProcessor(this.subject.getService(), queryOptions, this.subject.getDefaults(), true));
         }
 
         return new PermissionCalculator(getPlugin(), metadata, processors.build());

@@ -28,28 +28,33 @@ package me.lucko.luckperms.common.commands.track;
 import me.lucko.luckperms.common.actionlog.LoggedAction;
 import me.lucko.luckperms.common.command.CommandResult;
 import me.lucko.luckperms.common.command.abstraction.ChildCommand;
+import me.lucko.luckperms.common.command.access.ArgumentPermissions;
 import me.lucko.luckperms.common.command.access.CommandPermission;
+import me.lucko.luckperms.common.command.spec.CommandSpec;
+import me.lucko.luckperms.common.command.utils.ArgumentList;
 import me.lucko.luckperms.common.command.utils.StorageAssistant;
-import me.lucko.luckperms.common.locale.LocaleManager;
-import me.lucko.luckperms.common.locale.command.CommandSpec;
-import me.lucko.luckperms.common.locale.message.Message;
+import me.lucko.luckperms.common.locale.Message;
 import me.lucko.luckperms.common.model.Track;
 import me.lucko.luckperms.common.plugin.LuckPermsPlugin;
 import me.lucko.luckperms.common.sender.Sender;
 import me.lucko.luckperms.common.storage.misc.DataConstraints;
 import me.lucko.luckperms.common.util.Predicates;
 
+import net.kyori.adventure.text.Component;
 import net.luckperms.api.event.cause.CreationCause;
 
-import java.util.List;
-
 public class TrackClone extends ChildCommand<Track> {
-    public TrackClone(LocaleManager locale) {
-        super(CommandSpec.TRACK_CLONE.localize(locale), "clone", CommandPermission.TRACK_CLONE, Predicates.not(1));
+    public TrackClone() {
+        super(CommandSpec.TRACK_CLONE, "clone", CommandPermission.TRACK_CLONE, Predicates.not(1));
     }
 
     @Override
-    public CommandResult execute(LuckPermsPlugin plugin, Sender sender, Track track, List<String> args, String label) {
+    public CommandResult execute(LuckPermsPlugin plugin, Sender sender, Track target, ArgumentList args, String label) {
+        if (ArgumentPermissions.checkViewPerms(plugin, sender, getPermission().get(), target)) {
+            Message.COMMAND_NO_PERMISSION.send(sender);
+            return CommandResult.NO_PERMISSION;
+        }
+
         String newTrackName = args.get(0).toLowerCase();
         if (!DataConstraints.TRACK_NAME_TEST.test(newTrackName)) {
             Message.TRACK_INVALID_ENTRY.send(sender, newTrackName);
@@ -62,11 +67,16 @@ public class TrackClone extends ChildCommand<Track> {
             return CommandResult.LOADING_ERROR;
         }
 
-        newTrack.setGroups(track.getGroups());
+        if (ArgumentPermissions.checkModifyPerms(plugin, sender, getPermission().get(), newTrack)) {
+            Message.COMMAND_NO_PERMISSION.send(sender);
+            return CommandResult.NO_PERMISSION;
+        }
 
-        Message.CLONE_SUCCESS.send(sender, track.getName(), newTrack.getName());
+        newTrack.setGroups(target.getGroups());
 
-        LoggedAction.build().source(sender).target(track)
+        Message.CLONE_SUCCESS.send(sender, Component.text(target.getName()), Component.text(newTrack.getName()));
+
+        LoggedAction.build().source(sender).target(target)
                 .description("clone", newTrack.getName())
                 .build().submit(plugin, sender);
 

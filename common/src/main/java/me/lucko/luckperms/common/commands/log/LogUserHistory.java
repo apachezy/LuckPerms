@@ -30,40 +30,34 @@ import me.lucko.luckperms.common.actionlog.LoggedAction;
 import me.lucko.luckperms.common.command.CommandResult;
 import me.lucko.luckperms.common.command.abstraction.ChildCommand;
 import me.lucko.luckperms.common.command.access.CommandPermission;
-import me.lucko.luckperms.common.command.utils.ArgumentParser;
-import me.lucko.luckperms.common.locale.LocaleManager;
-import me.lucko.luckperms.common.locale.command.CommandSpec;
-import me.lucko.luckperms.common.locale.message.Message;
+import me.lucko.luckperms.common.command.spec.CommandSpec;
+import me.lucko.luckperms.common.command.utils.ArgumentList;
+import me.lucko.luckperms.common.locale.Message;
 import me.lucko.luckperms.common.plugin.LuckPermsPlugin;
 import me.lucko.luckperms.common.sender.Sender;
-import me.lucko.luckperms.common.util.DurationFormatter;
 import me.lucko.luckperms.common.util.Paginated;
 import me.lucko.luckperms.common.util.Predicates;
 
-import net.luckperms.api.actionlog.Action;
-
 import java.util.List;
-import java.util.Map;
-import java.util.SortedMap;
 import java.util.UUID;
 
 public class LogUserHistory extends ChildCommand<Log> {
     private static final int ENTRIES_PER_PAGE = 10;
 
-    public LogUserHistory(LocaleManager locale) {
-        super(CommandSpec.LOG_USER_HISTORY.localize(locale), "userhistory", CommandPermission.LOG_USER_HISTORY, Predicates.notInRange(1, 2));
+    public LogUserHistory() {
+        super(CommandSpec.LOG_USER_HISTORY, "userhistory", CommandPermission.LOG_USER_HISTORY, Predicates.notInRange(1, 2));
     }
 
     @Override
-    public CommandResult execute(LuckPermsPlugin plugin, Sender sender, Log log, List<String> args, String label) {
-        UUID uuid = ArgumentParser.parseUserTarget(0, args, plugin, sender);
+    public CommandResult execute(LuckPermsPlugin plugin, Sender sender, Log log, ArgumentList args, String label) {
+        UUID uuid = args.getUserTarget(0, plugin, sender);
         if (uuid == null) {
             return CommandResult.INVALID_ARGS;
         }
 
         Paginated<LoggedAction> content = new Paginated<>(log.getUserHistory(uuid));
 
-        int page = ArgumentParser.parseIntOrElse(1, args, Integer.MIN_VALUE);
+        int page = args.getIntOrDefault(1, Integer.MIN_VALUE);
         if (page != Integer.MIN_VALUE) {
             return showLog(page, sender, content);
         } else {
@@ -83,19 +77,12 @@ public class LogUserHistory extends ChildCommand<Log> {
             return CommandResult.INVALID_ARGS;
         }
 
-        SortedMap<Integer, LoggedAction> entries = log.getPage(page, ENTRIES_PER_PAGE);
-        String name = ((Action) entries.values().stream().findAny().get()).getTarget().getName();
+        List<Paginated.Entry<LoggedAction>> entries = log.getPage(page, ENTRIES_PER_PAGE);
+        String name = entries.stream().findAny().get().value().getTarget().getName();
         Message.LOG_HISTORY_USER_HEADER.send(sender, name, page, maxPage);
 
-        for (Map.Entry<Integer, LoggedAction> e : entries.entrySet()) {
-            Message.LOG_ENTRY.send(sender,
-                    e.getKey(),
-                    DurationFormatter.CONCISE_LOW_ACCURACY.format(e.getValue().getDurationSince()),
-                    e.getValue().getSourceFriendlyString(),
-                    Character.toString(LoggedAction.getTypeCharacter(((Action) e.getValue()).getTarget().getType())),
-                    e.getValue().getTargetFriendlyString(),
-                    e.getValue().getDescription()
-            );
+        for (Paginated.Entry<LoggedAction> e : entries) {
+            Message.LOG_ENTRY.send(sender, e.position(), e.value());
         }
 
         return CommandResult.SUCCESS;

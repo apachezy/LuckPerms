@@ -34,11 +34,20 @@ import net.luckperms.api.util.Tristate;
  * Permission Processor which is added for opped users, to simply return true if
  * no other processors match.
  */
-public class OpProcessor implements PermissionProcessor {
+public final class OpProcessor implements PermissionProcessor {
     private static final TristateResult TRUE_RESULT = new TristateResult.Factory(OpProcessor.class).result(Tristate.TRUE);
 
+    public static final OpProcessor INSTANCE = new OpProcessor();
+
+    private OpProcessor() {
+
+    }
+
     @Override
-    public TristateResult hasPermission(String permission) {
+    public TristateResult hasPermission(TristateResult prev, String permission) {
+        if (prev != TristateResult.UNDEFINED) {
+            return prev;
+        }
         return TRUE_RESULT;
     }
 }

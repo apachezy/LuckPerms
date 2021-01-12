@@ -25,22 +25,19 @@
 
 package me.lucko.luckperms.common.commands.user;
 
-import com.google.common.collect.Maps;
-
 import me.lucko.luckperms.common.cacheddata.type.MetaCache;
 import me.lucko.luckperms.common.command.CommandResult;
 import me.lucko.luckperms.common.command.abstraction.ChildCommand;
 import me.lucko.luckperms.common.command.access.ArgumentPermissions;
 import me.lucko.luckperms.common.command.access.CommandPermission;
-import me.lucko.luckperms.common.command.utils.MessageUtils;
-import me.lucko.luckperms.common.locale.LocaleManager;
-import me.lucko.luckperms.common.locale.command.CommandSpec;
-import me.lucko.luckperms.common.locale.message.Message;
+import me.lucko.luckperms.common.command.spec.CommandSpec;
+import me.lucko.luckperms.common.command.utils.ArgumentList;
+import me.lucko.luckperms.common.locale.Message;
 import me.lucko.luckperms.common.model.User;
 import me.lucko.luckperms.common.plugin.LuckPermsPlugin;
 import me.lucko.luckperms.common.sender.Sender;
-import me.lucko.luckperms.common.util.DurationFormatter;
 import me.lucko.luckperms.common.util.Predicates;
+import me.lucko.luckperms.common.util.UniqueIdType;
 import me.lucko.luckperms.common.verbose.event.MetaCheckEvent;
 
 import net.luckperms.api.context.ContextSet;
@@ -53,33 +50,30 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 public class UserInfo extends ChildCommand<User> {
-    public UserInfo(LocaleManager locale) {
-        super(CommandSpec.USER_INFO.localize(locale), "info", CommandPermission.USER_INFO, Predicates.alwaysFalse());
+    public UserInfo() {
+        super(CommandSpec.USER_INFO, "info", CommandPermission.USER_INFO, Predicates.alwaysFalse());
     }
 
     @Override
-    public CommandResult execute(LuckPermsPlugin plugin, Sender sender, User user, List<String> args, String label) {
-        if (ArgumentPermissions.checkViewPerms(plugin, sender, getPermission().get(), user)) {
+    public CommandResult execute(LuckPermsPlugin plugin, Sender sender, User target, ArgumentList args, String label) {
+        if (ArgumentPermissions.checkViewPerms(plugin, sender, getPermission().get(), target)) {
             Message.COMMAND_NO_PERMISSION.send(sender);
             return CommandResult.NO_PERMISSION;
         }
 
-        Message status = plugin.getBootstrap().isPlayerOnline(user.getUniqueId()) ? Message.PLAYER_ONLINE : Message.PLAYER_OFFLINE;
-
         Message.USER_INFO_GENERAL.send(sender,
-                user.getUsername().orElse("Unknown"),
-                user.getUniqueId(),
-                user.getUniqueId().version() == 4 ? "&2mojang" : "&8offline",
-                status.asString(plugin.getLocaleManager()),
-                user.getPrimaryGroup().getValue()
+                target.getUsername().orElse("Unknown"),
+                target.getUniqueId().toString(),
+                UniqueIdType.determineType(target.getUniqueId(), plugin).describe(),
+                plugin.getBootstrap().isPlayerOnline(target.getUniqueId())
         );
 
-        List<InheritanceNode> parents = user.normalData().inheritanceAsSortedSet().stream()
+        List<InheritanceNode> parents = target.normalData().inheritanceAsSortedSet().stream()
                 .filter(Node::getValue)
                 .filter(n -> !n.hasExpiry())
                 .collect(Collectors.toList());
 
-        List<InheritanceNode> tempParents = user.normalData().inheritanceAsSortedSet().stream()
+        List<InheritanceNode> tempParents = target.normalData().inheritanceAsSortedSet().stream()
                 .filter(Node::getValue)
                 .filter(Node::hasExpiry)
                 .collect(Collectors.toList());
@@ -87,51 +81,33 @@ public class UserInfo extends ChildCommand<User> {
         if (!parents.isEmpty()) {
             Message.INFO_PARENT_HEADER.send(sender);
             for (InheritanceNode node : parents) {
-                Message.INFO_PARENT_ENTRY.send(sender, node.getGroupName(), MessageUtils.getAppendableNodeContextString(plugin.getLocaleManager(), node));
+                Message.INFO_PARENT_NODE_ENTRY.send(sender, node);
             }
         }
 
         if (!tempParents.isEmpty()) {
             Message.INFO_TEMP_PARENT_HEADER.send(sender);
             for (InheritanceNode node : tempParents) {
-                Message.INFO_PARENT_ENTRY.send(sender, node.getGroupName(), MessageUtils.getAppendableNodeContextString(plugin.getLocaleManager(), node));
-                Message.INFO_PARENT_ENTRY_EXPIRY.send(sender, DurationFormatter.LONG.format(node.getExpiryDuration()));
+                Message.INFO_PARENT_TEMPORARY_NODE_ENTRY.send(sender, node);
             }
         }
 
-        String context = "&bNone";
-        String prefix = "&bNone";
-        String suffix = "&bNone";
-        String meta = "&bNone";
-        QueryOptions queryOptions = plugin.getQueryOptionsForUser(user).orElse(null);
-        if (queryOptions != null) {
-            ContextSet contextSet = queryOptions.context();
-            if (contextSet != null && !contextSet.isEmpty()) {
-                context = contextSet.toSet().stream()
-                        .map(e -> MessageUtils.contextToString(plugin.getLocaleManager(), e.getKey(), e.getValue()))
-                        .collect(Collectors.joining(" "));
-            }
+        QueryOptions queryOptions = plugin.getQueryOptionsForUser(target).orElse(null);
+        boolean active = true;
 
-            MetaCache data = user.getCachedData().getMetaData(queryOptions);
-            String prefixValue = data.getPrefix(MetaCheckEvent.Origin.INTERNAL);
-            if (prefixValue != null) {
-                prefix = "&f\"" + prefixValue + "&f\"";
-            }
-            String sussexValue = data.getSuffix(MetaCheckEvent.Origin.INTERNAL);
-            if (sussexValue != null) {
-                suffix = "&f\"" + sussexValue + "&f\"";
-            }
-
-            Map<String, List<String>> metaMap = data.getMeta(MetaCheckEvent.Origin.INTERNAL);
-            if (!metaMap.isEmpty()) {
-                meta = metaMap.entrySet().stream()
-                        .flatMap(entry -> entry.getValue().stream().map(value -> Maps.immutableEntry(entry.getKey(), value)))
-                        .map(e -> MessageUtils.contextToString(plugin.getLocaleManager(), e.getKey(), e.getValue()))
-                        .collect(Collectors.joining(" "));
-            }
+        if (queryOptions == null) {
+            active = false;
+            queryOptions = plugin.getContextManager().getStaticQueryOptions();
         }
 
-        Message.USER_INFO_DATA.send(sender, MessageUtils.formatBoolean(queryOptions != null), context, prefix, suffix, meta);
+        ContextSet contextSet = queryOptions.context();
+        MetaCache data = target.getCachedData().getMetaData(queryOptions);
+        String prefix = data.getPrefix(MetaCheckEvent.Origin.INTERNAL);
+        String suffix = data.getSuffix(MetaCheckEvent.Origin.INTERNAL);
+        String primaryGroup = data.getPrimaryGroup(MetaCheckEvent.Origin.INTERNAL);
+        Map<String, List<String>> meta = data.getMeta(MetaCheckEvent.Origin.INTERNAL);
+
+        Message.USER_INFO_CONTEXTUAL_DATA.send(sender, active, contextSet, prefix, suffix, primaryGroup, meta);
         return CommandResult.SUCCESS;
     }
 }

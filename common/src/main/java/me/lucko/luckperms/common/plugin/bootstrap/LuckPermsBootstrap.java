@@ -36,12 +36,12 @@ import org.checkerframework.checker.nullness.qual.Nullable;
 import java.io.InputStream;
 import java.nio.file.Path;
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
-import java.util.stream.Stream;
 
 /**
  * Bootstrap plugin interface
@@ -138,6 +138,7 @@ public interface LuckPermsBootstrap {
      * <p>Bukkit: /root/plugins/LuckPerms</p>
      * <p>Bungee: /root/plugins/LuckPerms</p>
      * <p>Sponge: /root/luckperms/</p>
+     * <p>Fabric: /root/mods/LuckPerms</p>
      *
      * @return the platforms data folder
      */
@@ -197,14 +198,14 @@ public interface LuckPermsBootstrap {
      *
      * @return a {@link List} of usernames
      */
-    Stream<String> getPlayerList();
+    Collection<String> getPlayerList();
 
     /**
      * Gets the UUIDs of the users online on the platform
      *
      * @return a {@link Set} of UUIDs
      */
-    Stream<UUID> getOnlinePlayers();
+    Collection<UUID> getOnlinePlayers();
 
     /**
      * Checks if a user is online
@@ -213,5 +214,18 @@ public interface LuckPermsBootstrap {
      * @return true if the user is online
      */
     boolean isPlayerOnline(UUID uniqueId);
+
+    /**
+     * Attempts to identify the plugin behind the given classloader.
+     *
+     * <p>Used for giving more helpful log messages when things break.</p>
+     *
+     * @param classLoader the classloader to identify
+     * @return the name of the classloader source
+     * @throws Exception anything
+     */
+    default @Nullable String identifyClassLoader(ClassLoader classLoader) throws Exception {
+        return null;
+    }
 
 }

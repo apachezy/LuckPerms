@@ -33,6 +33,7 @@ import me.lucko.luckperms.common.calculator.PermissionCalculator;
 import me.lucko.luckperms.common.calculator.processor.MapProcessor;
 import me.lucko.luckperms.common.calculator.processor.PermissionProcessor;
 import me.lucko.luckperms.common.calculator.processor.RegexProcessor;
+import me.lucko.luckperms.common.calculator.processor.SpongeWildcardProcessor;
 import me.lucko.luckperms.common.calculator.processor.WildcardProcessor;
 import me.lucko.luckperms.common.config.ConfigKeys;
 import me.lucko.luckperms.common.model.HolderType;
@@ -66,13 +67,18 @@ public class NukkitCalculatorFactory implements CalculatorFactory {
             processors.add(new WildcardProcessor());
         }
 
+        if (this.plugin.getConfiguration().get(ConfigKeys.APPLYING_WILDCARDS_SPONGE)) {
+            processors.add(new SpongeWildcardProcessor());
+        }
+
         boolean op = queryOptions.option(NukkitContextManager.OP_OPTION).orElse(false);
         if (metadata.getHolderType() == HolderType.USER && this.plugin.getConfiguration().get(ConfigKeys.APPLY_NUKKIT_DEFAULT_PERMISSIONS)) {
-            processors.add(new DefaultsProcessor(this.plugin, op));
+            boolean overrideWildcards = this.plugin.getConfiguration().get(ConfigKeys.APPLY_DEFAULT_NEGATIONS_BEFORE_WILDCARDS);
+            processors.add(new DefaultsProcessor(this.plugin, overrideWildcards, op));
         }
 
         if (op) {
-            processors.add(new OpProcessor());
+            processors.add(OpProcessor.INSTANCE);
         }
 
         return new PermissionCalculator(this.plugin, metadata, processors.build());

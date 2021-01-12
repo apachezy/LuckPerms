@@ -30,10 +30,10 @@ import me.lucko.luckperms.common.command.CommandResult;
 import me.lucko.luckperms.common.command.abstraction.ChildCommand;
 import me.lucko.luckperms.common.command.access.ArgumentPermissions;
 import me.lucko.luckperms.common.command.access.CommandPermission;
+import me.lucko.luckperms.common.command.spec.CommandSpec;
+import me.lucko.luckperms.common.command.utils.ArgumentList;
 import me.lucko.luckperms.common.command.utils.StorageAssistant;
-import me.lucko.luckperms.common.locale.LocaleManager;
-import me.lucko.luckperms.common.locale.command.CommandSpec;
-import me.lucko.luckperms.common.locale.message.Message;
+import me.lucko.luckperms.common.locale.Message;
 import me.lucko.luckperms.common.model.Group;
 import me.lucko.luckperms.common.plugin.LuckPermsPlugin;
 import me.lucko.luckperms.common.sender.Sender;
@@ -43,16 +43,14 @@ import me.lucko.luckperms.common.util.Predicates;
 import net.luckperms.api.event.cause.CreationCause;
 import net.luckperms.api.model.data.DataType;
 
-import java.util.List;
-
 public class GroupClone extends ChildCommand<Group> {
-    public GroupClone(LocaleManager locale) {
-        super(CommandSpec.GROUP_CLONE.localize(locale), "clone", CommandPermission.GROUP_CLONE, Predicates.not(1));
+    public GroupClone() {
+        super(CommandSpec.GROUP_CLONE, "clone", CommandPermission.GROUP_CLONE, Predicates.not(1));
     }
 
     @Override
-    public CommandResult execute(LuckPermsPlugin plugin, Sender sender, Group group, List<String> args, String label) {
-        if (ArgumentPermissions.checkViewPerms(plugin, sender, getPermission().get(), group)) {
+    public CommandResult execute(LuckPermsPlugin plugin, Sender sender, Group target, ArgumentList args, String label) {
+        if (ArgumentPermissions.checkViewPerms(plugin, sender, getPermission().get(), target)) {
             Message.COMMAND_NO_PERMISSION.send(sender);
             return CommandResult.NO_PERMISSION;
         }
@@ -74,12 +72,12 @@ public class GroupClone extends ChildCommand<Group> {
             return CommandResult.NO_PERMISSION;
         }
 
-        newGroup.replaceNodes(DataType.NORMAL, group.normalData().immutable());
+        newGroup.setNodes(DataType.NORMAL, target.normalData().asList());
 
-        Message.CLONE_SUCCESS.send(sender, group.getName(), newGroup.getName());
+        Message.CLONE_SUCCESS.send(sender, target.getFormattedDisplayName(), newGroup.getFormattedDisplayName());
 
         LoggedAction.build().source(sender).target(newGroup)
-                .description("clone", group.getName())
+                .description("clone", target.getName())
                 .build().submit(plugin, sender);
 
         StorageAssistant.save(newGroup, sender, plugin);

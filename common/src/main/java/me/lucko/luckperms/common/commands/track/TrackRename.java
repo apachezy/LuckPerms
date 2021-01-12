@@ -28,29 +28,34 @@ package me.lucko.luckperms.common.commands.track;
 import me.lucko.luckperms.common.actionlog.LoggedAction;
 import me.lucko.luckperms.common.command.CommandResult;
 import me.lucko.luckperms.common.command.abstraction.ChildCommand;
+import me.lucko.luckperms.common.command.access.ArgumentPermissions;
 import me.lucko.luckperms.common.command.access.CommandPermission;
+import me.lucko.luckperms.common.command.spec.CommandSpec;
+import me.lucko.luckperms.common.command.utils.ArgumentList;
 import me.lucko.luckperms.common.command.utils.StorageAssistant;
-import me.lucko.luckperms.common.locale.LocaleManager;
-import me.lucko.luckperms.common.locale.command.CommandSpec;
-import me.lucko.luckperms.common.locale.message.Message;
+import me.lucko.luckperms.common.locale.Message;
 import me.lucko.luckperms.common.model.Track;
 import me.lucko.luckperms.common.plugin.LuckPermsPlugin;
 import me.lucko.luckperms.common.sender.Sender;
 import me.lucko.luckperms.common.storage.misc.DataConstraints;
 import me.lucko.luckperms.common.util.Predicates;
 
+import net.kyori.adventure.text.Component;
 import net.luckperms.api.event.cause.CreationCause;
 import net.luckperms.api.event.cause.DeletionCause;
 
-import java.util.List;
-
 public class TrackRename extends ChildCommand<Track> {
-    public TrackRename(LocaleManager locale) {
-        super(CommandSpec.TRACK_RENAME.localize(locale), "rename", CommandPermission.TRACK_RENAME, Predicates.not(1));
+    public TrackRename() {
+        super(CommandSpec.TRACK_RENAME, "rename", CommandPermission.TRACK_RENAME, Predicates.not(1));
     }
 
     @Override
-    public CommandResult execute(LuckPermsPlugin plugin, Sender sender, Track track, List<String> args, String label) {
+    public CommandResult execute(LuckPermsPlugin plugin, Sender sender, Track target, ArgumentList args, String label) {
+        if (ArgumentPermissions.checkModifyPerms(plugin, sender, getPermission().get(), target)) {
+            Message.COMMAND_NO_PERMISSION.send(sender);
+            return CommandResult.NO_PERMISSION;
+        }
+
         String newTrackName = args.get(0).toLowerCase();
         if (!DataConstraints.TRACK_NAME_TEST.test(newTrackName)) {
             Message.TRACK_INVALID_ENTRY.send(sender, newTrackName);
@@ -66,24 +71,24 @@ public class TrackRename extends ChildCommand<Track> {
         try {
             newTrack = plugin.getStorage().createAndLoadTrack(newTrackName, CreationCause.COMMAND).get();
         } catch (Exception e) {
-            e.printStackTrace();
-            Message.CREATE_ERROR.send(sender, newTrackName);
+            plugin.getLogger().warn("Error whilst creating track", e);
+            Message.CREATE_ERROR.send(sender, Component.text(newTrackName));
             return CommandResult.FAILURE;
         }
 
         try {
-            plugin.getStorage().deleteTrack(track, DeletionCause.COMMAND).get();
+            plugin.getStorage().deleteTrack(target, DeletionCause.COMMAND).get();
         } catch (Exception e) {
-            e.printStackTrace();
-            Message.DELETE_ERROR.send(sender, track.getName());
+            plugin.getLogger().warn("Error whilst deleting track", e);
+            Message.DELETE_ERROR.send(sender, Component.text(target.getName()));
             return CommandResult.FAILURE;
         }
 
-        newTrack.setGroups(track.getGroups());
+        newTrack.setGroups(target.getGroups());
 
-        Message.RENAME_SUCCESS.send(sender, track.getName(), newTrack.getName());
+        Message.RENAME_SUCCESS.send(sender, Component.text(target.getName()), Component.text(newTrack.getName()));
 
-        LoggedAction.build().source(sender).target(track)
+        LoggedAction.build().source(sender).target(target)
                 .description("rename", newTrack.getName())
                 .build().submit(plugin, sender);
 

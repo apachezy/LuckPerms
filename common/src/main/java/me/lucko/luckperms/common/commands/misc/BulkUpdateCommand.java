@@ -29,6 +29,7 @@ import com.github.benmanes.caffeine.cache.Cache;
 
 import me.lucko.luckperms.common.bulkupdate.BulkUpdate;
 import me.lucko.luckperms.common.bulkupdate.BulkUpdateBuilder;
+import me.lucko.luckperms.common.bulkupdate.BulkUpdateStatistics;
 import me.lucko.luckperms.common.bulkupdate.DataType;
 import me.lucko.luckperms.common.bulkupdate.action.DeleteAction;
 import me.lucko.luckperms.common.bulkupdate.action.UpdateAction;
@@ -41,28 +42,27 @@ import me.lucko.luckperms.common.command.CommandResult;
 import me.lucko.luckperms.common.command.abstraction.CommandException;
 import me.lucko.luckperms.common.command.abstraction.SingleCommand;
 import me.lucko.luckperms.common.command.access.CommandPermission;
-import me.lucko.luckperms.common.command.utils.ArgumentParser;
-import me.lucko.luckperms.common.locale.LocaleManager;
-import me.lucko.luckperms.common.locale.command.CommandSpec;
-import me.lucko.luckperms.common.locale.message.Message;
+import me.lucko.luckperms.common.command.spec.CommandSpec;
+import me.lucko.luckperms.common.command.utils.ArgumentException;
+import me.lucko.luckperms.common.command.utils.ArgumentList;
+import me.lucko.luckperms.common.locale.Message;
 import me.lucko.luckperms.common.plugin.LuckPermsPlugin;
 import me.lucko.luckperms.common.sender.Sender;
 import me.lucko.luckperms.common.util.CaffeineFactory;
 import me.lucko.luckperms.common.util.Predicates;
 
-import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 
 public class BulkUpdateCommand extends SingleCommand {
     private final Cache<String, BulkUpdate> pendingOperations = CaffeineFactory.newBuilder().expireAfterWrite(30, TimeUnit.SECONDS).build();
 
-    public BulkUpdateCommand(LocaleManager locale) {
-        super(CommandSpec.BULK_UPDATE.localize(locale), "BulkUpdate", CommandPermission.BULK_UPDATE, Predicates.alwaysFalse());
+    public BulkUpdateCommand() {
+        super(CommandSpec.BULK_UPDATE, "BulkUpdate", CommandPermission.BULK_UPDATE, Predicates.alwaysFalse());
     }
 
     @Override
-    public CommandResult execute(LuckPermsPlugin plugin, Sender sender, List<String> args, String label) throws CommandException {
+    public CommandResult execute(LuckPermsPlugin plugin, Sender sender, ArgumentList args, String label) throws CommandException {
         if (!sender.isConsole()) {
             Message.BULK_UPDATE_MUST_USE_CONSOLE.send(sender);
             return CommandResult.NO_PERMISSION;
@@ -82,6 +82,10 @@ public class BulkUpdateCommand extends SingleCommand {
                 if (ex == null) {
                     plugin.getSyncTaskBuffer().requestDirectly();
                     Message.BULK_UPDATE_SUCCESS.send(sender);
+                    if (operation.isTrackingStatistics()) {
+                        BulkUpdateStatistics stats = operation.getStatistics();
+                        Message.BULK_UPDATE_STATISTICS.send(sender, stats.getAffectedNodes(), stats.getAffectedUsers(), stats.getAffectedGroups());
+                    }
                 } else {
                     ex.printStackTrace();
                     Message.BULK_UPDATE_FAILURE.send(sender);
@@ -91,10 +95,12 @@ public class BulkUpdateCommand extends SingleCommand {
         }
 
         if (args.size() < 2) {
-            throw new ArgumentParser.DetailedUsageException();
+            throw new ArgumentException.DetailedUsage();
         }
 
         BulkUpdateBuilder bulkUpdateBuilder = BulkUpdateBuilder.create();
+
+        bulkUpdateBuilder.trackStatistics(!args.remove("--silent"));
 
         try {
             bulkUpdateBuilder.dataType(DataType.valueOf(args.remove(0).toUpperCase()));
@@ -110,20 +116,20 @@ public class BulkUpdateCommand extends SingleCommand {
                 break;
             case "update":
                 if (args.size() < 2) {
-                    throw new ArgumentParser.DetailedUsageException();
+                    throw new ArgumentException.DetailedUsage();
                 }
 
                 String field = args.remove(0);
                 QueryField queryField = QueryField.of(field);
                 if (queryField == null) {
-                    throw new ArgumentParser.DetailedUsageException();
+                    throw new ArgumentException.DetailedUsage();
                 }
                 String value = args.remove(0);
 
                 bulkUpdateBuilder.action(UpdateAction.of(queryField, value));
                 break;
             default:
-                throw new ArgumentParser.DetailedUsageException();
+                throw new ArgumentException.DetailedUsage();
         }
 
         for (String constraint : args) {

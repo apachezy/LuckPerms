@@ -29,6 +29,7 @@ import com.google.common.base.Preconditions;
 
 import me.lucko.luckperms.bukkit.LPBukkitPlugin;
 import me.lucko.luckperms.bukkit.context.BukkitContextManager;
+import me.lucko.luckperms.common.cacheddata.type.MetaCache;
 import me.lucko.luckperms.common.cacheddata.type.PermissionCache;
 import me.lucko.luckperms.common.calculator.processor.MapProcessor;
 import me.lucko.luckperms.common.calculator.result.TristateResult;
@@ -41,20 +42,20 @@ import me.lucko.luckperms.common.model.manager.group.GroupManager;
 import me.lucko.luckperms.common.node.factory.NodeBuilders;
 import me.lucko.luckperms.common.node.types.Inheritance;
 import me.lucko.luckperms.common.query.QueryOptionsImpl;
+import me.lucko.luckperms.common.util.UniqueIdType;
 import me.lucko.luckperms.common.util.Uuids;
 import me.lucko.luckperms.common.verbose.event.MetaCheckEvent;
 import me.lucko.luckperms.common.verbose.event.PermissionCheckEvent;
 
-import net.luckperms.api.context.ContextSet;
 import net.luckperms.api.context.DefaultContextKeys;
 import net.luckperms.api.context.MutableContextSet;
 import net.luckperms.api.model.data.DataType;
 import net.luckperms.api.node.Node;
+import net.luckperms.api.node.NodeType;
 import net.luckperms.api.query.Flag;
 import net.luckperms.api.query.QueryOptions;
 import net.milkbowl.vault.permission.Permission;
 
-import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
@@ -99,7 +100,7 @@ public class LuckPermsVaultPermission extends AbstractVaultPermission {
         Objects.requireNonNull(player, "player");
 
         // are they online?
-        Player onlinePlayer = Bukkit.getPlayerExact(player);
+        Player onlinePlayer = this.plugin.getBootstrap().getServer().getPlayerExact(player);
         if (onlinePlayer != null) {
             return onlinePlayer.getUniqueId();
         }
@@ -111,7 +112,7 @@ public class LuckPermsVaultPermission extends AbstractVaultPermission {
         }
 
         // are we on the main thread?
-        if (!this.plugin.getBootstrap().isServerStarting() && Bukkit.isPrimaryThread() && !this.plugin.getConfiguration().get(ConfigKeys.VAULT_UNSAFE_LOOKUPS)) {
+        if (!this.plugin.getBootstrap().isServerStarting() && this.plugin.getBootstrap().getServer().isPrimaryThread() && !this.plugin.getConfiguration().get(ConfigKeys.VAULT_UNSAFE_LOOKUPS)) {
             throw new RuntimeException(
                     "The operation to lookup a UUID for '" + player + "' was cancelled by LuckPerms. This is NOT a bug. \n" +
                     "The lookup request was made on the main server thread. It is not safe to execute a request to \n" +
@@ -124,10 +125,7 @@ public class LuckPermsVaultPermission extends AbstractVaultPermission {
         }
 
         // lookup a username from the database
-        uuid = this.plugin.getStorage().getPlayerUniqueId(player.toLowerCase()).join();
-        if (uuid == null) {
-            uuid = this.plugin.getBootstrap().lookupUniqueId(player).orElse(null);
-        }
+        uuid = this.plugin.lookupUniqueId(player).orElse(null);
 
         // unable to find a user, throw an exception
         if (uuid == null) {
@@ -146,10 +144,8 @@ public class LuckPermsVaultPermission extends AbstractVaultPermission {
             return user;
         }
 
-        // if the uuid is version 2, assume it is an NPC
-        // see: https://github.com/lucko/LuckPerms/issues/1470
-        // and https://github.com/lucko/LuckPerms/issues/1470#issuecomment-475403162
-        if (uuid.version() == 2) {
+        // is it an npc?
+        if (UniqueIdType.determineType(uuid, this.plugin).getType().equals("npc")) {
             String npcGroupName = this.plugin.getConfiguration().get(ConfigKeys.VAULT_NPC_GROUP);
             Group npcGroup = this.plugin.getGroupManager().getIfLoaded(npcGroupName);
             if (npcGroup == null) {
@@ -162,7 +158,7 @@ public class LuckPermsVaultPermission extends AbstractVaultPermission {
         }
 
         // are we on the main thread?
-        if (!this.plugin.getBootstrap().isServerStarting() && Bukkit.isPrimaryThread() && !this.plugin.getConfiguration().get(ConfigKeys.VAULT_UNSAFE_LOOKUPS)) {
+        if (!this.plugin.getBootstrap().isServerStarting() && this.plugin.getBootstrap().getServer().isPrimaryThread() && !this.plugin.getConfiguration().get(ConfigKeys.VAULT_UNSAFE_LOOKUPS)) {
             throw new RuntimeException(
                     "The operation to load user data for '" + uuid + "' was cancelled by LuckPerms. This is NOT a bug. \n" +
                     "The lookup request was made on the main server thread. It is not safe to execute a request to \n" +
@@ -180,7 +176,7 @@ public class LuckPermsVaultPermission extends AbstractVaultPermission {
     @Override
     public String[] getGroups() {
         return this.plugin.getGroupManager().getAll().values().stream()
-                .map(Group::getPlainDisplayName)
+                .map(this::groupName)
                 .toArray(String[]::new);
     }
 
@@ -251,16 +247,12 @@ public class LuckPermsVaultPermission extends AbstractVaultPermission {
         Objects.requireNonNull(uuid, "uuid");
 
         PermissionHolder user = lookupUser(uuid);
-        ContextSet contexts = getQueryOptions(uuid, world).context();
+        QueryOptions queryOptions = getQueryOptions(uuid, world);
 
-        return user.normalData().immutableInheritance().values().stream()
-                .filter(n -> n.getContexts().isSatisfiedBy(contexts))
+        return user.getOwnNodes(NodeType.INHERITANCE, queryOptions).stream()
                 .map(n -> {
                     Group group = this.plugin.getGroupManager().getIfLoaded(n.getGroupName());
-                    if (group != null) {
-                        return group.getPlainDisplayName();
-                    }
-                    return n.getGroupName();
+                    return group != null ? groupName(group) : n.getGroupName();
                 })
                 .toArray(String[]::new);
     }
@@ -273,14 +265,13 @@ public class LuckPermsVaultPermission extends AbstractVaultPermission {
         if (user instanceof Group) { // npc
             return this.plugin.getConfiguration().get(ConfigKeys.VAULT_NPC_GROUP);
         }
-        String value = ((User) user).getPrimaryGroup().getValue();
-        Group group = getGroup(value);
-        if (group != null) {
-            value = group.getPlainDisplayName();
-        }
 
-        this.plugin.getVerboseHandler().offerMetaCheckEvent(MetaCheckEvent.Origin.THIRD_PARTY_API, user.getPlainDisplayName(), QueryOptionsImpl.DEFAULT_CONTEXTUAL, "primarygroup", value);
-        return value;
+        QueryOptions queryOptions = getQueryOptions(uuid, world);
+        MetaCache metaData = user.getCachedData().getMetaData(queryOptions);
+        String value = metaData.getPrimaryGroup(MetaCheckEvent.Origin.THIRD_PARTY_API);
+
+        Group group = getGroup(value);
+        return group != null ? groupName(group) : value;
     }
 
     @Override
@@ -328,6 +319,14 @@ public class LuckPermsVaultPermission extends AbstractVaultPermission {
 
     private Group getGroup(String name) {
         return this.plugin.getGroupManager().getByDisplayName(name);
+    }
+
+    private String groupName(Group group) {
+        if (this.plugin.getConfiguration().get(ConfigKeys.VAULT_GROUP_USE_DISPLAYNAMES)) {
+            return group.getPlainDisplayName();
+        } else {
+            return group.getName();
+        }
     }
 
     private boolean checkGroupExists(String group) {
@@ -378,7 +377,7 @@ public class LuckPermsVaultPermission extends AbstractVaultPermission {
         boolean op = false;
         if (player != null) {
             op = player.isOp();
-        } else if (uuid != null && uuid.version() == 2) { // npc
+        } else if (uuid != null && UniqueIdType.determineType(uuid, this.plugin).getType().equals("npc")) {
             op = this.plugin.getConfiguration().get(ConfigKeys.VAULT_NPC_OP_STATUS);
         }
 

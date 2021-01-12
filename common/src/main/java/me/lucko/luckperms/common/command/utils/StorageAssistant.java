@@ -26,7 +26,7 @@
 package me.lucko.luckperms.common.command.utils;
 
 import me.lucko.luckperms.common.config.ConfigKeys;
-import me.lucko.luckperms.common.locale.message.Message;
+import me.lucko.luckperms.common.locale.Message;
 import me.lucko.luckperms.common.messaging.InternalMessagingService;
 import me.lucko.luckperms.common.model.Group;
 import me.lucko.luckperms.common.model.HolderType;
@@ -45,19 +45,15 @@ public final class StorageAssistant {
     private StorageAssistant() {}
 
     public static Group loadGroup(String target, Sender sender, LuckPermsPlugin plugin, boolean auditTemporary) {
-        Group group = plugin.getStorage().loadGroup(target).join().orElse(null);
+        Group group = plugin.getGroupManager().getByDisplayName(target);
+        if (group != null) {
+            target = group.getName();
+        }
+
+        group = plugin.getStorage().loadGroup(target).join().orElse(null);
         if (group == null) {
-            // failed to load, but it might be a display name.
-            group = plugin.getGroupManager().getByDisplayName(target);
-
-            // nope, not a display name
-            if (group == null) {
-                Message.GROUP_NOT_FOUND.send(sender, target);
-                return null;
-            }
-
-            // it was a display name, we need to reload
-            plugin.getStorage().loadGroup(group.getName()).join();
+            Message.GROUP_NOT_FOUND.send(sender, target);
+            return null;
         }
 
         if (auditTemporary) {
@@ -81,8 +77,8 @@ public final class StorageAssistant {
         try {
             plugin.getStorage().saveUser(user).get();
         } catch (Exception e) {
-            e.printStackTrace();
-            Message.USER_SAVE_ERROR.send(sender, user.getFormattedDisplayName());
+            plugin.getLogger().warn("Error whilst saving user", e);
+            Message.USER_SAVE_ERROR.send(sender, user);
             return;
         }
 
@@ -96,8 +92,8 @@ public final class StorageAssistant {
         try {
             plugin.getStorage().saveGroup(group).get();
         } catch (Exception e) {
-            e.printStackTrace();
-            Message.GROUP_SAVE_ERROR.send(sender, group.getFormattedDisplayName());
+            plugin.getLogger().warn("Error whilst saving group", e);
+            Message.GROUP_SAVE_ERROR.send(sender, group);
             return;
         }
 
@@ -114,7 +110,7 @@ public final class StorageAssistant {
         try {
             plugin.getStorage().saveTrack(track).get();
         } catch (Exception e) {
-            e.printStackTrace();
+            plugin.getLogger().warn("Error whilst saving track", e);
             Message.TRACK_SAVE_ERROR.send(sender, track.getName());
             return;
         }

@@ -27,26 +27,29 @@ package me.lucko.luckperms.common.commands.track;
 
 import me.lucko.luckperms.common.command.CommandResult;
 import me.lucko.luckperms.common.command.abstraction.ChildCommand;
+import me.lucko.luckperms.common.command.access.ArgumentPermissions;
 import me.lucko.luckperms.common.command.access.CommandPermission;
-import me.lucko.luckperms.common.command.utils.MessageUtils;
-import me.lucko.luckperms.common.locale.LocaleManager;
-import me.lucko.luckperms.common.locale.command.CommandSpec;
-import me.lucko.luckperms.common.locale.message.Message;
+import me.lucko.luckperms.common.command.spec.CommandSpec;
+import me.lucko.luckperms.common.command.utils.ArgumentList;
+import me.lucko.luckperms.common.locale.Message;
 import me.lucko.luckperms.common.model.Track;
 import me.lucko.luckperms.common.plugin.LuckPermsPlugin;
 import me.lucko.luckperms.common.sender.Sender;
 import me.lucko.luckperms.common.util.Predicates;
 
-import java.util.List;
-
 public class TrackInfo extends ChildCommand<Track> {
-    public TrackInfo(LocaleManager locale) {
-        super(CommandSpec.TRACK_INFO.localize(locale), "info", CommandPermission.TRACK_INFO, Predicates.alwaysFalse());
+    public TrackInfo() {
+        super(CommandSpec.TRACK_INFO, "info", CommandPermission.TRACK_INFO, Predicates.alwaysFalse());
     }
 
     @Override
-    public CommandResult execute(LuckPermsPlugin plugin, Sender sender, Track track, List<String> args, String label) {
-        Message.TRACK_INFO.send(sender, track.getName(), MessageUtils.listToArrowSep(track.getGroups()));
+    public CommandResult execute(LuckPermsPlugin plugin, Sender sender, Track target, ArgumentList args, String label) {
+        if (ArgumentPermissions.checkViewPerms(plugin, sender, getPermission().get(), target)) {
+            Message.COMMAND_NO_PERMISSION.send(sender);
+            return CommandResult.NO_PERMISSION;
+        }
+
+        Message.TRACK_INFO.send(sender, target.getName(), Message.formatTrackPath(target.getGroups()));
         return CommandResult.SUCCESS;
     }
 }

@@ -30,30 +30,27 @@ import com.google.common.collect.ImmutableList;
 
 import me.lucko.luckperms.common.command.abstraction.Command;
 import me.lucko.luckperms.common.command.abstraction.ParentCommand;
+import me.lucko.luckperms.common.command.spec.CommandSpec;
 import me.lucko.luckperms.common.commands.generic.meta.CommandMeta;
 import me.lucko.luckperms.common.commands.generic.other.HolderClear;
 import me.lucko.luckperms.common.commands.generic.other.HolderEditor;
 import me.lucko.luckperms.common.commands.generic.other.HolderShowTracks;
 import me.lucko.luckperms.common.commands.generic.parent.CommandParent;
 import me.lucko.luckperms.common.commands.generic.permission.CommandPermission;
-import me.lucko.luckperms.common.config.ConfigKeys;
-import me.lucko.luckperms.common.locale.LocaleManager;
-import me.lucko.luckperms.common.locale.command.CommandSpec;
-import me.lucko.luckperms.common.locale.message.Message;
+import me.lucko.luckperms.common.locale.Message;
 import me.lucko.luckperms.common.model.HolderType;
 import me.lucko.luckperms.common.model.User;
 import me.lucko.luckperms.common.model.UserIdentifier;
 import me.lucko.luckperms.common.plugin.LuckPermsPlugin;
 import me.lucko.luckperms.common.sender.Sender;
-import me.lucko.luckperms.common.storage.misc.DataConstraints;
 import me.lucko.luckperms.common.util.CaffeineFactory;
 import me.lucko.luckperms.common.util.Uuids;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
-import java.util.stream.Collectors;
 
 public class UserParentCommand extends ParentCommand<User, UserIdentifier> {
 
@@ -65,53 +62,40 @@ public class UserParentCommand extends ParentCommand<User, UserIdentifier> {
             .expireAfterAccess(1, TimeUnit.HOURS)
             .build(key -> new ReentrantLock());
 
-    public UserParentCommand(LocaleManager locale) {
-        super(CommandSpec.USER.localize(locale), "User", Type.TAKES_ARGUMENT_FOR_TARGET, ImmutableList.<Command<User>>builder()
-                .add(new UserInfo(locale))
-                .add(new CommandPermission<>(locale, HolderType.USER))
-                .add(new CommandParent<>(locale, HolderType.USER))
-                .add(new CommandMeta<>(locale, HolderType.USER))
-                .add(new HolderEditor<>(locale, HolderType.USER))
-                .add(new UserPromote(locale))
-                .add(new UserDemote(locale))
-                .add(new HolderShowTracks<>(locale, HolderType.USER))
-                .add(new HolderClear<>(locale, HolderType.USER))
-                .add(new UserClone(locale))
+    public UserParentCommand() {
+        super(CommandSpec.USER, "User", Type.TAKES_ARGUMENT_FOR_TARGET, ImmutableList.<Command<User>>builder()
+                .add(new UserInfo())
+                .add(new CommandPermission<>(HolderType.USER))
+                .add(new CommandParent<>(HolderType.USER))
+                .add(new CommandMeta<>(HolderType.USER))
+                .add(new HolderEditor<>(HolderType.USER))
+                .add(new UserPromote())
+                .add(new UserDemote())
+                .add(new HolderShowTracks<>(HolderType.USER))
+                .add(new HolderClear<>(HolderType.USER))
+                .add(new UserClone())
                 .build()
         );
     }
 
     public static UUID parseTargetUniqueId(String target, LuckPermsPlugin plugin, Sender sender) {
-        UUID uniqueId = Uuids.parse(target);
-        if (uniqueId == null) {
-            if (!plugin.getConfiguration().get(ConfigKeys.ALLOW_INVALID_USERNAMES)) {
-                if (!DataConstraints.PLAYER_USERNAME_TEST.test(target)) {
-                    Message.USER_INVALID_ENTRY.send(sender, target);
-                    return null;
-                }
-            } else {
-                if (!DataConstraints.PLAYER_USERNAME_TEST_LENIENT.test(target)) {
-                    Message.USER_INVALID_ENTRY.send(sender, target);
-                    return null;
-                }
-            }
-
-            uniqueId = plugin.getStorage().getPlayerUniqueId(target.toLowerCase()).join();
-            if (uniqueId == null) {
-                if (!plugin.getConfiguration().get(ConfigKeys.USE_SERVER_UUID_CACHE)) {
-                    Message.USER_NOT_FOUND.send(sender, target);
-                    return null;
-                }
-
-                uniqueId = plugin.getBootstrap().lookupUniqueId(target).orElse(null);
-                if (uniqueId == null) {
-                    Message.USER_NOT_FOUND.send(sender, target);
-                    return null;
-                }
-            }
+        UUID parsed = Uuids.parse(target);
+        if (parsed != null) {
+            return parsed;
         }
 
-        return uniqueId;
+        if (!plugin.testUsernameValidity(target)) {
+            Message.USER_INVALID_ENTRY.send(sender, target);
+            return null;
+        }
+
+        UUID lookup = plugin.lookupUniqueId(target).orElse(null);
+        if (lookup == null) {
+            Message.USER_NOT_FOUND.send(sender, target);
+            return null;
+        }
+
+        return lookup;
     }
 
     @Override
@@ -144,6 +128,6 @@ public class UserParentCommand extends ParentCommand<User, UserIdentifier> {
 
     @Override
     protected List<String> getTargets(LuckPermsPlugin plugin) {
-        return plugin.getBootstrap().getPlayerList().collect(Collectors.toList());
+        return new ArrayList<>(plugin.getBootstrap().getPlayerList());
     }
 }

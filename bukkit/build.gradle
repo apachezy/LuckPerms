@@ -10,29 +10,13 @@ repositories {
 dependencies {
     compile project(':common')
 
-    compileOnly 'com.destroystokyo.paper:paper-api:1.15.1-R0.1-SNAPSHOT'
-    compileOnly 'net.kyori:text-adapter-bukkit:3.0.2'
+    compileOnly 'com.destroystokyo.paper:paper-api:1.15.2-R0.1-SNAPSHOT'
+    compileOnly 'me.lucko:adventure-platform-bukkit:4.0.0' // re: this artifact - see note in common/build.gradle
     compileOnly 'me.lucko:commodore:1.7'
     compileOnly('net.milkbowl.vault:VaultAPI:1.6') {
         exclude(module: 'bukkit')
     }
     compileOnly 'lilypad.client.connect:api:0.0.1-SNAPSHOT'
-
-    // migration plugins
-    compileOnly 'org.tyrannyofheaven.bukkit:zPermissions:1.3'
-    compileOnly('ru.tehkode:PermissionsEx:1.23.5') {
-        exclude(module: 'bukkit')
-        exclude(module: 'updater')
-        exclude(module: 'commons-dbcp')
-        exclude(module: 'AccountsClient')
-    }
-    compileOnly 'com.github.gustav9797:PowerfulPermsAPI:4.5.2'
-    compileOnly 'org.anjocaido:GroupManager:1.4'
-    compileOnly 'de.bananaco:bpermissions-api:2.12'
-    compileOnly('com.platymuus:bukkit-permissions:2.5') {
-        exclude(module: 'bukkit')
-        exclude(module: 'metrics')
-    }
 }
 
 processResources {
@@ -50,11 +34,12 @@ shadowJar {
         include(dependency('me.lucko.luckperms:.*'))
     }
 
-    relocate 'net.kyori.text', 'me.lucko.luckperms.lib.text'
+    relocate 'net.kyori.adventure', 'me.lucko.luckperms.lib.adventure'
     relocate 'net.kyori.event', 'me.lucko.luckperms.lib.eventbus'
     relocate 'com.github.benmanes.caffeine', 'me.lucko.luckperms.lib.caffeine'
     relocate 'okio', 'me.lucko.luckperms.lib.okio'
     relocate 'okhttp3', 'me.lucko.luckperms.lib.okhttp3'
+    relocate 'net.bytebuddy', 'me.lucko.luckperms.lib.bytebuddy'
     relocate 'me.lucko.commodore', 'me.lucko.luckperms.lib.commodore'
     relocate 'org.mariadb.jdbc', 'me.lucko.luckperms.lib.mariadb'
     relocate 'com.mysql', 'me.lucko.luckperms.lib.mysql'

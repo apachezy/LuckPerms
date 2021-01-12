@@ -31,14 +31,12 @@ import me.lucko.luckperms.common.command.abstraction.CommandException;
 import me.lucko.luckperms.common.command.abstraction.GenericChildCommand;
 import me.lucko.luckperms.common.command.access.ArgumentPermissions;
 import me.lucko.luckperms.common.command.access.CommandPermission;
+import me.lucko.luckperms.common.command.spec.CommandSpec;
 import me.lucko.luckperms.common.command.tabcomplete.TabCompleter;
 import me.lucko.luckperms.common.command.tabcomplete.TabCompletions;
-import me.lucko.luckperms.common.command.utils.ArgumentParser;
-import me.lucko.luckperms.common.command.utils.MessageUtils;
+import me.lucko.luckperms.common.command.utils.ArgumentList;
 import me.lucko.luckperms.common.command.utils.StorageAssistant;
-import me.lucko.luckperms.common.locale.LocaleManager;
-import me.lucko.luckperms.common.locale.command.CommandSpec;
-import me.lucko.luckperms.common.locale.message.Message;
+import me.lucko.luckperms.common.locale.Message;
 import me.lucko.luckperms.common.model.PermissionHolder;
 import me.lucko.luckperms.common.plugin.LuckPermsPlugin;
 import me.lucko.luckperms.common.sender.Sender;
@@ -51,13 +49,13 @@ import net.luckperms.api.node.NodeType;
 import java.util.List;
 
 public class MetaClear extends GenericChildCommand {
-    public MetaClear(LocaleManager locale) {
-        super(CommandSpec.META_CLEAR.localize(locale), "clear", CommandPermission.USER_META_CLEAR, CommandPermission.GROUP_META_CLEAR, Predicates.alwaysFalse());
+    public MetaClear() {
+        super(CommandSpec.META_CLEAR, "clear", CommandPermission.USER_META_CLEAR, CommandPermission.GROUP_META_CLEAR, Predicates.alwaysFalse());
     }
 
     @Override
-    public CommandResult execute(LuckPermsPlugin plugin, Sender sender, PermissionHolder holder, List<String> args, String label, CommandPermission permission) throws CommandException {
-        if (ArgumentPermissions.checkModifyPerms(plugin, sender, permission, holder)) {
+    public CommandResult execute(LuckPermsPlugin plugin, Sender sender, PermissionHolder target, ArgumentList args, String label, CommandPermission permission) throws CommandException {
+        if (ArgumentPermissions.checkModifyPerms(plugin, sender, permission, target)) {
             Message.COMMAND_NO_PERMISSION.send(sender);
             return CommandResult.NO_PERMISSION;
         }
@@ -90,39 +88,35 @@ public class MetaClear extends GenericChildCommand {
             type = NodeType.META_OR_CHAT_META;
         }
 
-        int before = holder.normalData().immutable().size();
+        int before = target.normalData().size();
 
-        MutableContextSet context = ArgumentParser.parseContext(0, args, plugin);
+        MutableContextSet context = args.getContextOrDefault(0, plugin);
 
         if (ArgumentPermissions.checkContext(plugin, sender, permission, context) ||
-                ArgumentPermissions.checkGroup(plugin, sender, holder, context)) {
+                ArgumentPermissions.checkGroup(plugin, sender, target, context)) {
             Message.COMMAND_NO_PERMISSION.send(sender);
             return CommandResult.NO_PERMISSION;
         }
 
         if (context.isEmpty()) {
-            holder.removeIf(DataType.NORMAL, null, type::matches, false);
+            target.removeIf(DataType.NORMAL, null, type::matches, false);
         } else {
-            holder.removeIf(DataType.NORMAL, context, type::matches, false);
+            target.removeIf(DataType.NORMAL, context, type::matches, false);
         }
 
-        int changed = before - holder.normalData().immutable().size();
-        if (changed == 1) {
-            Message.META_CLEAR_SUCCESS_SINGULAR.send(sender, holder.getFormattedDisplayName(), type.name().toLowerCase(), MessageUtils.contextSetToString(plugin.getLocaleManager(), context), changed);
-        } else {
-            Message.META_CLEAR_SUCCESS.send(sender, holder.getFormattedDisplayName(), type.name().toLowerCase(), MessageUtils.contextSetToString(plugin.getLocaleManager(), context), changed);
-        }
+        int changed = before - target.normalData().size();
+        Message.META_CLEAR_SUCCESS.send(sender, target, type.name().toLowerCase(), context, changed);
 
-        LoggedAction.build().source(sender).target(holder)
+        LoggedAction.build().source(sender).target(target)
                 .description("meta", "clear", context)
                 .build().submit(plugin, sender);
 
-        StorageAssistant.save(holder, sender, plugin);
+        StorageAssistant.save(target, sender, plugin);
         return CommandResult.SUCCESS;
     }
 
     @Override
-    public List<String> tabComplete(LuckPermsPlugin plugin, Sender sender, List<String> args) {
+    public List<String> tabComplete(LuckPermsPlugin plugin, Sender sender, ArgumentList args) {
         return TabCompleter.create()
                 .from(0, TabCompletions.contexts(plugin))
                 .complete(args);

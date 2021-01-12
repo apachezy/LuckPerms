@@ -28,19 +28,20 @@ package me.lucko.luckperms.velocity;
 import com.velocitypowered.api.command.CommandSource;
 import com.velocitypowered.api.proxy.Player;
 
-import me.lucko.luckperms.common.plugin.LuckPermsPlugin;
+import me.lucko.luckperms.common.locale.TranslationManager;
 import me.lucko.luckperms.common.sender.Sender;
 import me.lucko.luckperms.common.sender.SenderFactory;
-import me.lucko.luckperms.common.util.TextUtils;
 import me.lucko.luckperms.velocity.service.CompatibilityUtil;
+import me.lucko.luckperms.velocity.util.AdventureCompat;
 
-import net.kyori.text.Component;
+import net.kyori.adventure.text.Component;
 import net.luckperms.api.util.Tristate;
 
+import java.util.Locale;
 import java.util.UUID;
 
-public class VelocitySenderFactory extends SenderFactory<CommandSource> {
-    public VelocitySenderFactory(LuckPermsPlugin plugin) {
+public class VelocitySenderFactory extends SenderFactory<LPVelocityPlugin, CommandSource> {
+    public VelocitySenderFactory(LPVelocityPlugin plugin) {
         super(plugin);
     }
 
@@ -61,13 +62,13 @@ public class VelocitySenderFactory extends SenderFactory<CommandSource> {
     }
 
     @Override
-    protected void sendMessage(CommandSource source, String s) {
-        sendMessage(source, TextUtils.fromLegacy(s));
-    }
-
-    @Override
     protected void sendMessage(CommandSource source, Component message) {
-        source.sendMessage(message);
+        Locale locale = null;
+        if (source instanceof Player) {
+            locale = ((Player) source).getPlayerSettings().getLocale();
+        }
+        Component rendered = TranslationManager.render(message, locale);
+        AdventureCompat.sendMessage(source, rendered);
     }
 
     @Override
@@ -78,5 +79,10 @@ public class VelocitySenderFactory extends SenderFactory<CommandSource> {
     @Override
     protected boolean hasPermission(CommandSource source, String node) {
         return source.hasPermission(node);
+    }
+
+    @Override
+    protected void performCommand(CommandSource source, String command) {
+        getPlugin().getBootstrap().getProxy().getCommandManager().executeAsync(source, command).join();
     }
 }

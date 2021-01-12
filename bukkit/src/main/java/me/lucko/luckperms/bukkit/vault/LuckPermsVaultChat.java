@@ -157,24 +157,20 @@ public class LuckPermsVaultChat extends AbstractVaultChat {
     @Override
     public String getGroupChatPrefix(String world, String name) {
         Objects.requireNonNull(name, "name");
-        Group group = getGroup(name);
-        if (group == null) {
+        MetaCache metaData = getGroupMetaCache(name, world);
+        if (metaData == null) {
             return null;
         }
-        QueryOptions queryOptions = this.vaultPermission.getQueryOptions(null, world);
-        MetaCache metaData = group.getCachedData().getMetaData(queryOptions);
         return Strings.nullToEmpty(metaData.getPrefix(MetaCheckEvent.Origin.THIRD_PARTY_API));
     }
 
     @Override
     public String getGroupChatSuffix(String world, String name) {
         Objects.requireNonNull(name, "name");
-        Group group = getGroup(name);
-        if (group == null) {
+        MetaCache metaData = getGroupMetaCache(name, world);
+        if (metaData == null) {
             return null;
         }
-        QueryOptions queryOptions = this.vaultPermission.getQueryOptions(null, world);
-        MetaCache metaData = group.getCachedData().getMetaData(queryOptions);
         return Strings.nullToEmpty(metaData.getSuffix(MetaCheckEvent.Origin.THIRD_PARTY_API));
     }
 
@@ -202,12 +198,10 @@ public class LuckPermsVaultChat extends AbstractVaultChat {
     public String getGroupMeta(String world, String name, String key) {
         Objects.requireNonNull(name, "name");
         Objects.requireNonNull(key, "key");
-        Group group = getGroup(name);
-        if (group == null) {
+        MetaCache metaData = getGroupMetaCache(name, world);
+        if (metaData == null) {
             return null;
         }
-        QueryOptions queryOptions = this.vaultPermission.getQueryOptions(null, world);
-        MetaCache metaData = group.getCachedData().getMetaData(queryOptions);
         return metaData.getMetaValue(key, MetaCheckEvent.Origin.THIRD_PARTY_API);
     }
 
@@ -228,6 +222,15 @@ public class LuckPermsVaultChat extends AbstractVaultChat {
         return this.plugin.getGroupManager().getByDisplayName(name);
     }
 
+    private MetaCache getGroupMetaCache(String name, String world) {
+        Group group = getGroup(name);
+        if (group == null) {
+            return null;
+        }
+        QueryOptions queryOptions = this.vaultPermission.getQueryOptions(null, world);
+        return group.getCachedData().getMetaData(queryOptions);
+    }
+
     private void setChatMeta(PermissionHolder holder, ChatMetaType type, String value, String world) {
         // remove all prefixes/suffixes directly set on the user/group
         holder.removeIf(DataType.NORMAL, null, type.nodeType()::matches, false);
@@ -238,8 +241,7 @@ public class LuckPermsVaultChat extends AbstractVaultChat {
         }
 
         // find the max inherited priority & add 10
-        MetaAccumulator metaAccumulator = holder.accumulateMeta(null, createQueryOptionsForWorldSet(world));
-        metaAccumulator.complete();
+        MetaAccumulator metaAccumulator = holder.accumulateMeta(createQueryOptionsForWorldSet(world));
         int priority = metaAccumulator.getChatMeta(type).keySet().stream().mapToInt(e -> e).max().orElse(0) + 10;
 
         Node node = type.builder(value, priority)
@@ -274,7 +276,7 @@ public class LuckPermsVaultChat extends AbstractVaultChat {
 
     private QueryOptions createQueryOptionsForWorldSet(String world) {
         ImmutableContextSet.Builder context = new ImmutableContextSetImpl.BuilderImpl();
-        if (world != null && !world.equals("") && !world.equalsIgnoreCase("global")) {
+        if (world != null && !world.isEmpty() && !world.equalsIgnoreCase("global")) {
             context.add(DefaultContextKeys.WORLD_KEY, world.toLowerCase());
         }
         context.add(DefaultContextKeys.SERVER_KEY, this.vaultPermission.getVaultServer());

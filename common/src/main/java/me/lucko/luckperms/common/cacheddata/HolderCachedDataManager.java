@@ -35,6 +35,7 @@ import net.luckperms.api.node.ChatMetaType;
 import net.luckperms.api.query.QueryOptions;
 
 import java.util.Map;
+import java.util.function.IntFunction;
 
 /**
  * Holds an easily accessible cache of a holders data in a number of contexts
@@ -49,6 +50,11 @@ public abstract class HolderCachedDataManager<T extends PermissionHolder> extend
     public HolderCachedDataManager(T holder) {
         super(holder.getPlugin());
         this.holder = holder;
+    }
+
+    @Override
+    protected QueryOptions getQueryOptions() {
+        return this.holder.getQueryOptions();
     }
 
     @Override
@@ -69,8 +75,8 @@ public abstract class HolderCachedDataManager<T extends PermissionHolder> extend
     }
 
     @Override
-    protected Map<String, Boolean> resolvePermissions(QueryOptions queryOptions) {
-        return this.holder.exportPermissions(queryOptions, true, getPlugin().getConfiguration().get(ConfigKeys.APPLYING_SHORTHAND));
+    protected <M extends Map<String, Boolean>> M resolvePermissions(IntFunction<M> mapFactory, QueryOptions queryOptions) {
+        return this.holder.exportPermissions(mapFactory, queryOptions, true, getPlugin().getConfiguration().get(ConfigKeys.APPLYING_SHORTHAND));
     }
 
     @Override

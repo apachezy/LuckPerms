@@ -29,34 +29,31 @@ import com.google.common.collect.ImmutableList;
 
 import me.lucko.luckperms.common.command.abstraction.GenericChildCommand;
 import me.lucko.luckperms.common.command.abstraction.GenericParentCommand;
-import me.lucko.luckperms.common.locale.LocaleManager;
-import me.lucko.luckperms.common.locale.command.CommandSpec;
+import me.lucko.luckperms.common.command.spec.CommandSpec;
 import me.lucko.luckperms.common.model.HolderType;
 import me.lucko.luckperms.common.model.PermissionHolder;
 
-import net.luckperms.api.node.ChatMetaType;
-
 public class CommandMeta<T extends PermissionHolder> extends GenericParentCommand<T> {
-    public CommandMeta(LocaleManager locale, HolderType type) {
-        super(CommandSpec.META.localize(locale), "Meta", type, ImmutableList.<GenericChildCommand>builder()
-                .add(new MetaInfo(locale))
-                .add(new MetaSet(locale))
-                .add(new MetaUnset(locale))
-                .add(new MetaSetTemp(locale))
-                .add(new MetaUnsetTemp(locale))
-                .add(new MetaAddChatMeta(locale, ChatMetaType.PREFIX))
-                .add(new MetaAddChatMeta(locale, ChatMetaType.SUFFIX))
-                .add(new MetaSetChatMeta(locale, ChatMetaType.PREFIX))
-                .add(new MetaSetChatMeta(locale, ChatMetaType.SUFFIX))
-                .add(new MetaRemoveChatMeta(locale, ChatMetaType.PREFIX))
-                .add(new MetaRemoveChatMeta(locale, ChatMetaType.SUFFIX))
-                .add(new MetaAddTempChatMeta(locale, ChatMetaType.PREFIX))
-                .add(new MetaAddTempChatMeta(locale, ChatMetaType.SUFFIX))
-                .add(new MetaSetTempChatMeta(locale, ChatMetaType.PREFIX))
-                .add(new MetaSetTempChatMeta(locale, ChatMetaType.SUFFIX))
-                .add(new MetaRemoveTempChatMeta(locale, ChatMetaType.PREFIX))
-                .add(new MetaRemoveTempChatMeta(locale, ChatMetaType.SUFFIX))
-                .add(new MetaClear(locale))
+    public CommandMeta(HolderType type) {
+        super(CommandSpec.META, "Meta", type, ImmutableList.<GenericChildCommand>builder()
+                .add(new MetaInfo())
+                .add(new MetaSet())
+                .add(new MetaUnset())
+                .add(new MetaSetTemp())
+                .add(new MetaUnsetTemp())
+                .add(MetaAddChatMeta.forPrefix())
+                .add(MetaAddChatMeta.forSuffix())
+                .add(MetaSetChatMeta.forPrefix())
+                .add(MetaSetChatMeta.forSuffix())
+                .add(MetaRemoveChatMeta.forPrefix())
+                .add(MetaRemoveChatMeta.forSuffix())
+                .add(MetaAddTempChatMeta.forPrefix())
+                .add(MetaAddTempChatMeta.forSuffix())
+                .add(MetaSetTempChatMeta.forPrefix())
+                .add(MetaSetTempChatMeta.forSuffix())
+                .add(MetaRemoveTempChatMeta.forPrefix())
+                .add(MetaRemoveTempChatMeta.forSuffix())
+                .add(new MetaClear())
                 .build());
     }
 }

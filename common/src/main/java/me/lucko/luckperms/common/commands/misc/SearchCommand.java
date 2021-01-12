@@ -34,59 +34,50 @@ import me.lucko.luckperms.common.cache.LoadingMap;
 import me.lucko.luckperms.common.command.CommandResult;
 import me.lucko.luckperms.common.command.abstraction.SingleCommand;
 import me.lucko.luckperms.common.command.access.CommandPermission;
+import me.lucko.luckperms.common.command.spec.CommandSpec;
 import me.lucko.luckperms.common.command.tabcomplete.TabCompleter;
 import me.lucko.luckperms.common.command.tabcomplete.TabCompletions;
-import me.lucko.luckperms.common.command.utils.ArgumentParser;
-import me.lucko.luckperms.common.command.utils.MessageUtils;
-import me.lucko.luckperms.common.config.ConfigKeys;
-import me.lucko.luckperms.common.locale.LocaleManager;
-import me.lucko.luckperms.common.locale.command.CommandSpec;
-import me.lucko.luckperms.common.locale.message.Message;
+import me.lucko.luckperms.common.command.utils.ArgumentList;
+import me.lucko.luckperms.common.locale.Message;
 import me.lucko.luckperms.common.model.HolderType;
-import me.lucko.luckperms.common.node.comparator.HeldNodeComparator;
-import me.lucko.luckperms.common.node.factory.NodeCommandFactory;
+import me.lucko.luckperms.common.node.comparator.NodeEntryComparator;
+import me.lucko.luckperms.common.node.matcher.ConstraintNodeMatcher;
+import me.lucko.luckperms.common.node.matcher.StandardNodeMatchers;
 import me.lucko.luckperms.common.plugin.LuckPermsPlugin;
 import me.lucko.luckperms.common.sender.Sender;
-import me.lucko.luckperms.common.util.DurationFormatter;
+import me.lucko.luckperms.common.storage.misc.NodeEntry;
 import me.lucko.luckperms.common.util.Iterators;
 import me.lucko.luckperms.common.util.Predicates;
-import me.lucko.luckperms.common.util.TextUtils;
 
-import net.kyori.text.ComponentBuilder;
-import net.kyori.text.TextComponent;
-import net.kyori.text.event.ClickEvent;
-import net.kyori.text.event.HoverEvent;
-import net.luckperms.api.node.HeldNode;
 import net.luckperms.api.node.Node;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
 public class SearchCommand extends SingleCommand {
-    public SearchCommand(LocaleManager locale) {
-        super(CommandSpec.SEARCH.localize(locale), "Search", CommandPermission.SEARCH, Predicates.notInRange(1, 3));
+    public SearchCommand() {
+        super(CommandSpec.SEARCH, "Search", CommandPermission.SEARCH, Predicates.notInRange(1, 3));
     }
 
     @Override
-    public CommandResult execute(LuckPermsPlugin plugin, Sender sender, List<String> args, String label) {
+    public CommandResult execute(LuckPermsPlugin plugin, Sender sender, ArgumentList args, String label) {
         Comparison comparison = StandardComparison.parseComparison(args.get(0));
         if (comparison == null) {
             comparison = StandardComparison.EQUAL;
             args.add(0, "==");
         }
 
-        Constraint query = Constraint.of(comparison, args.get(1));
-        int page = ArgumentParser.parseIntOrElse(2, args, 1);
+        ConstraintNodeMatcher<Node> matcher = StandardNodeMatchers.of(Constraint.of(comparison, args.get(1)));
+        int page = args.getIntOrDefault(2, 1);
 
-        Message.SEARCH_SEARCHING.send(sender, query);
+        Message.SEARCH_SEARCHING.send(sender, matcher.toString());
 
-        List<HeldNode<UUID>> matchedUsers = plugin.getStorage().getUsersWithPermission(query).join();
-        List<HeldNode<String>> matchedGroups = plugin.getStorage().getGroupsWithPermission(query).join();
+        List<NodeEntry<UUID, Node>> matchedUsers = plugin.getStorage().searchUserNodes(matcher).join();
+        List<NodeEntry<String, Node>> matchedGroups = plugin.getStorage().searchGroupNodes(matcher).join();
 
         int users = matchedUsers.size();
         int groups = matchedGroups.size();
@@ -94,21 +85,7 @@ public class SearchCommand extends SingleCommand {
         Message.SEARCH_RESULT.send(sender, users + groups, users, groups);
 
         if (!matchedUsers.isEmpty()) {
-            Map<UUID, String> uuidLookups = LoadingMap.of(u -> {
-                String s = plugin.getStorage().getPlayerName(u).join();
-                if (s != null && !s.isEmpty() && !s.equals("null")) {
-                    return s;
-                }
-
-                if (plugin.getConfiguration().get(ConfigKeys.USE_SERVER_UUID_CACHE)) {
-                    s = plugin.getBootstrap().lookupUsername(u).orElse(null);
-                    if (s != null) {
-                        return s;
-                    }
-                }
-
-                return u.toString();
-            });
+            Map<UUID, String> uuidLookups = LoadingMap.of(u -> plugin.lookupUsername(u).orElseGet(u::toString));
             sendResult(sender, matchedUsers, uuidLookups::get, Message.SEARCH_SHOWING_USERS, HolderType.USER, label, page, comparison);
         }
 
@@ -120,68 +97,35 @@ public class SearchCommand extends SingleCommand {
     }
 
     @Override
-    public List<String> tabComplete(LuckPermsPlugin plugin, Sender sender, List<String> args) {
+    public List<String> tabComplete(LuckPermsPlugin plugin, Sender sender, ArgumentList args) {
         return TabCompleter.create()
                 .at(0, TabCompletions.permissions(plugin))
                 .complete(args);
     }
 
-    private static <T extends Comparable<T>> void sendResult(Sender sender, List<HeldNode<T>> results, Function<T, String> lookupFunction, Message headerMessage, HolderType holderType, String label, int page, Comparison comparison) {
+    private static <T extends Comparable<T>> void sendResult(Sender sender, List<NodeEntry<T, Node>> results, Function<T, String> lookupFunction, Message.Args3<Integer, Integer, Integer> headerMessage, HolderType holderType, String label, int page, Comparison comparison) {
         results = new ArrayList<>(results);
-        results.sort(HeldNodeComparator.normal());
+        results.sort(NodeEntryComparator.normal());
 
         int pageIndex = page - 1;
-        List<List<HeldNode<T>>> pages = Iterators.divideIterable(results, 15);
+        List<List<NodeEntry<T, Node>>> pages = Iterators.divideIterable(results, 15);
 
         if (pageIndex < 0 || pageIndex >= pages.size()) {
             page = 1;
             pageIndex = 0;
         }
 
-        List<HeldNode<T>> content = pages.get(pageIndex);
+        List<NodeEntry<T, Node>> content = pages.get(pageIndex);
 
-        List<Map.Entry<String, HeldNode<T>>> mappedContent = content.stream()
+        List<Map.Entry<String, NodeEntry<T, Node>>> mappedContent = content.stream()
                 .map(hp -> Maps.immutableEntry(lookupFunction.apply(hp.getHolder()), hp))
                 .collect(Collectors.toList());
 
         // send header
         headerMessage.send(sender, page, pages.size(), results.size());
 
-        for (Map.Entry<String, HeldNode<T>> ent : mappedContent) {
-            // only show the permission in the results if the comparison isn't equals
-            String permission = "";
-            if (comparison != StandardComparison.EQUAL) {
-                permission = "&7 - (" + ent.getValue().getNode().getKey() + ")";
-            }
-
-            String s = "&3> &b" + ent.getKey() + permission + "&7 - " + (ent.getValue().getNode().getValue() ? "&a" : "&c") + ent.getValue().getNode().getValue() + getNodeExpiryString(ent.getValue().getNode()) + MessageUtils.getAppendableNodeContextString(sender.getPlugin().getLocaleManager(), ent.getValue().getNode());
-            TextComponent message = TextUtils.fromLegacy(s, TextUtils.AMPERSAND_CHAR).toBuilder().applyDeep(makeFancy(ent.getKey(), holderType, label, ent.getValue(), sender.getPlugin())).build();
-            sender.sendMessage(message);
+        for (Map.Entry<String, NodeEntry<T, Node>> ent : mappedContent) {
+            Message.SEARCH_NODE_ENTRY.send(sender, comparison != StandardComparison.EQUAL, ent.getValue().getNode(), ent.getKey(), holderType, label, sender.getPlugin());
         }
-    }
-
-    private static String getNodeExpiryString(Node node) {
-        if (!node.hasExpiry()) {
-            return "";
-        }
-
-        return " &8(&7expires in " + DurationFormatter.LONG.format(node.getExpiryDuration()) + "&8)";
-    }
-
-    private static Consumer<ComponentBuilder<?, ?>> makeFancy(String holderName, HolderType holderType, String label, HeldNode<?> perm, LuckPermsPlugin plugin) {
-        HoverEvent hoverEvent = HoverEvent.showText(TextUtils.fromLegacy(TextUtils.joinNewline(
-                "&3> " + (perm.getNode().getValue() ? "&a" : "&c") + perm.getNode().getKey(),
-                " ",
-                "&7Click to remove this node from " + holderName
-        ), TextUtils.AMPERSAND_CHAR));
-
-        boolean explicitGlobalContext = !plugin.getConfiguration().getContextsFile().getDefaultContexts().isEmpty();
-        String command = "/" + label + " " + NodeCommandFactory.generateCommand(perm.getNode(), holderName, holderType, false, explicitGlobalContext);
-        ClickEvent clickEvent = ClickEvent.suggestCommand(command);
-
-        return component -> {
-            component.hoverEvent(hoverEvent);
-            component.clickEvent(clickEvent);
-        };
     }
 }

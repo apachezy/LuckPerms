@@ -25,25 +25,33 @@
 
 package me.lucko.luckperms.common.api.implementation;
 
+import com.google.common.collect.ImmutableListMultimap;
+
 import me.lucko.luckperms.common.api.ApiUtils;
-import me.lucko.luckperms.common.bulkupdate.comparison.Constraint;
-import me.lucko.luckperms.common.bulkupdate.comparison.StandardComparison;
 import me.lucko.luckperms.common.model.User;
 import me.lucko.luckperms.common.model.manager.user.UserManager;
+import me.lucko.luckperms.common.node.matcher.ConstraintNodeMatcher;
+import me.lucko.luckperms.common.node.matcher.StandardNodeMatchers;
 import me.lucko.luckperms.common.plugin.LuckPermsPlugin;
+import me.lucko.luckperms.common.storage.misc.NodeEntry;
 import me.lucko.luckperms.common.util.ImmutableCollectors;
 
 import net.luckperms.api.model.PlayerSaveResult;
 import net.luckperms.api.node.HeldNode;
+import net.luckperms.api.node.Node;
+import net.luckperms.api.node.matcher.NodeMatcher;
 
 import org.checkerframework.checker.nullness.qual.NonNull;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
 
 public class ApiUserManager extends ApiAbstractManager<User, net.luckperms.api.model.user.User, UserManager<?>> implements net.luckperms.api.model.user.UserManager {
     public ApiUserManager(LuckPermsPlugin plugin, UserManager<?> handle) {
@@ -51,11 +59,8 @@ public class ApiUserManager extends ApiAbstractManager<User, net.luckperms.api.m
     }
 
     @Override
-    protected net.luckperms.api.model.user.User getDelegateFor(User internal) {
-        if (internal == null) {
-            return null;
-        }
-        return new ApiUser(internal);
+    protected net.luckperms.api.model.user.User proxy(User internal) {
+        return internal == null ? null : internal.getApiProxy();
     }
 
     @Override
@@ -68,7 +73,7 @@ public class ApiUserManager extends ApiAbstractManager<User, net.luckperms.api.m
         }
 
         return this.plugin.getStorage().loadUser(uniqueId, username)
-                .thenApply(this::getDelegateFor);
+                .thenApply(this::proxy);
     }
 
     @Override
@@ -85,8 +90,22 @@ public class ApiUserManager extends ApiAbstractManager<User, net.luckperms.api.m
 
     @Override
     public @NonNull CompletableFuture<Void> saveUser(net.luckperms.api.model.user.@NonNull User user) {
-        Objects.requireNonNull(user, "user");
-        return this.plugin.getStorage().saveUser(ApiUser.cast(user));
+        User internal = ApiUser.cast(Objects.requireNonNull(user, "user"));
+        this.plugin.getUserManager().giveDefaultIfNeeded(internal);
+        return this.plugin.getStorage().saveUser(internal);
+    }
+
+    @Override
+    public @NonNull CompletableFuture<Void> modifyUser(@NonNull UUID uniqueId, @NonNull Consumer<? super net.luckperms.api.model.user.User> action) {
+        Objects.requireNonNull(uniqueId, "uniqueId");
+        Objects.requireNonNull(action, "action");
+
+        return this.plugin.getStorage().loadUser(uniqueId, null)
+                .thenApplyAsync(user -> {
+                    action.accept(user.getApiProxy());
+                    return user;
+                }, this.plugin.getBootstrap().getScheduler().async())
+                .thenCompose(user -> this.plugin.getStorage().saveUser(user));
     }
 
     @Override
@@ -97,32 +116,54 @@ public class ApiUserManager extends ApiAbstractManager<User, net.luckperms.api.m
     }
 
     @Override
+    public @NonNull CompletableFuture<Void> deletePlayerData(@NonNull UUID uniqueId) {
+        Objects.requireNonNull(uniqueId, "uniqueId");
+        return this.plugin.getStorage().deletePlayerData(uniqueId);
+    }
+
+    @Override
     public @NonNull CompletableFuture<Set<UUID>> getUniqueUsers() {
         return this.plugin.getStorage().getUniqueUsers();
     }
 
+    @SuppressWarnings({"unchecked", "rawtypes"})
     @Override
+    @Deprecated
     public @NonNull CompletableFuture<List<HeldNode<UUID>>> getWithPermission(@NonNull String permission) {
         Objects.requireNonNull(permission, "permission");
-        return this.plugin.getStorage().getUsersWithPermission(Constraint.of(StandardComparison.EQUAL, permission));
+        return (CompletableFuture) this.plugin.getStorage().searchUserNodes(StandardNodeMatchers.key(permission));
+    }
+
+    @SuppressWarnings("unchecked")
+    @Override
+    public <T extends Node> @NonNull CompletableFuture<Map<UUID, Collection<T>>> searchAll(@NonNull NodeMatcher<? extends T> matcher) {
+        Objects.requireNonNull(matcher, "matcher");
+        ConstraintNodeMatcher<? extends T> constraint = (ConstraintNodeMatcher<? extends T>) matcher;
+        return this.plugin.getStorage().searchUserNodes(constraint).thenApply(list -> {
+            ImmutableListMultimap.Builder<UUID, T> builder = ImmutableListMultimap.builder();
+            for (NodeEntry<UUID, ? extends T> row : list) {
+                builder.put(row.getHolder(), row.getNode());
+            }
+            return builder.build().asMap();
+        });
     }
 
     @Override
     public net.luckperms.api.model.user.User getUser(@NonNull UUID uniqueId) {
         Objects.requireNonNull(uniqueId, "uuid");
-        return getDelegateFor(this.handle.getIfLoaded(uniqueId));
+        return proxy(this.handle.getIfLoaded(uniqueId));
     }
 
     @Override
     public net.luckperms.api.model.user.User getUser(@NonNull String username) {
         Objects.requireNonNull(username, "name");
-        return getDelegateFor(this.handle.getByUsername(username));
+        return proxy(this.handle.getByUsername(username));
     }
 
     @Override
     public @NonNull Set<net.luckperms.api.model.user.User> getLoadedUsers() {
         return this.handle.getAll().values().stream()
-                .map(this::getDelegateFor)
+                .map(this::proxy)
                 .collect(ImmutableCollectors.toSet());
     }
 

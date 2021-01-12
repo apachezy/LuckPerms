@@ -28,9 +28,8 @@ package me.lucko.luckperms.common.sender;
 import me.lucko.luckperms.common.command.access.CommandPermission;
 import me.lucko.luckperms.common.context.ContextManager;
 import me.lucko.luckperms.common.plugin.LuckPermsPlugin;
-import me.lucko.luckperms.common.util.TextUtils;
 
-import net.kyori.text.Component;
+import net.kyori.adventure.text.Component;
 import net.luckperms.api.context.DefaultContextKeys;
 import net.luckperms.api.context.ImmutableContextSet;
 import net.luckperms.api.util.Tristate;
@@ -45,7 +44,7 @@ import java.util.stream.Collectors;
 public interface Sender {
 
     /** The uuid used by the console sender. */
-    UUID CONSOLE_UUID = UUID.fromString("00000000-0000-0000-0000-000000000000");
+    UUID CONSOLE_UUID = new UUID(0, 0); // 00000000-0000-0000-0000-000000000000
     /** The name used by the console sender. */
     String CONSOLE_NAME = "Console";
 
@@ -72,7 +71,7 @@ public interface Sender {
     default String getNameWithLocation() {
         String name = getName();
 
-        ContextManager<?> contextManager = getPlugin().getContextManager();
+        ContextManager<?, ?> contextManager = getPlugin().getContextManager();
         if (contextManager == null) {
             return name;
         }
@@ -106,15 +105,6 @@ public interface Sender {
     UUID getUniqueId();
 
     /**
-     * Send a message to the Sender.
-     *
-     * <p>Supports {@link TextUtils#SECTION_CHAR} for message formatting.</p>
-     *
-     * @param message the message to send.
-     */
-    void sendMessage(String message);
-
-    /**
      * Send a json message to the Sender.
      *
      * @param message the message to send.
@@ -146,6 +136,13 @@ public interface Sender {
     default boolean hasPermission(CommandPermission permission) {
         return hasPermission(permission.getPermission());
     }
+
+    /**
+     * Makes the sender perform a command.
+     *
+     * @param commandLine the command
+     */
+    void performCommand(String commandLine);
 
     /**
      * Gets whether this sender is the console

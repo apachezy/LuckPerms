@@ -27,7 +27,6 @@ package me.lucko.luckperms.bukkit.inject.server;
 
 import me.lucko.luckperms.bukkit.LPBukkitPlugin;
 
-import org.bukkit.Bukkit;
 import org.bukkit.permissions.Permissible;
 import org.bukkit.plugin.PluginManager;
 import org.bukkit.plugin.SimplePluginManager;
@@ -39,7 +38,7 @@ import java.util.Objects;
 /**
  * Injects a {@link LuckPermsSubscriptionMap} into the {@link PluginManager}.
  */
-public class InjectorSubscriptionMap implements Runnable {
+public class InjectorSubscriptionMap {
     private static final Field PERM_SUBS_FIELD;
 
     static {
@@ -59,20 +58,18 @@ public class InjectorSubscriptionMap implements Runnable {
         this.plugin = plugin;
     }
 
-    @Override
-    public void run() {
+    public void inject() {
         try {
-            LuckPermsSubscriptionMap subscriptionMap = inject();
+            LuckPermsSubscriptionMap subscriptionMap = tryInject();
             if (subscriptionMap != null) {
                 this.plugin.setSubscriptionMap(subscriptionMap);
             }
         } catch (Exception e) {
-            this.plugin.getLogger().severe("Exception occurred whilst injecting LuckPerms Permission Subscription map.");
-            e.printStackTrace();
+            this.plugin.getLogger().severe("Exception occurred whilst injecting LuckPerms Permission Subscription map.", e);
         }
     }
 
-    private LuckPermsSubscriptionMap inject() throws Exception {
+    private LuckPermsSubscriptionMap tryInject() throws Exception {
         Objects.requireNonNull(PERM_SUBS_FIELD, "PERM_SUBS_FIELD");
         PluginManager pluginManager = this.plugin.getBootstrap().getServer().getPluginManager();
 
@@ -100,11 +97,11 @@ public class InjectorSubscriptionMap implements Runnable {
         return newMap;
     }
 
-    public static void uninject() {
+    public void uninject() {
         try {
             Objects.requireNonNull(PERM_SUBS_FIELD, "PERM_SUBS_FIELD");
 
-            PluginManager pluginManager = Bukkit.getServer().getPluginManager();
+            PluginManager pluginManager = this.plugin.getBootstrap().getServer().getPluginManager();
             if (!(pluginManager instanceof SimplePluginManager)) {
                 return;
             }
@@ -115,7 +112,7 @@ public class InjectorSubscriptionMap implements Runnable {
                 PERM_SUBS_FIELD.set(pluginManager, lpMap.detach());
             }
         } catch (Exception e) {
-            e.printStackTrace();
+            this.plugin.getLogger().severe("Exception occurred whilst uninjecting LuckPerms Permission Subscription map.", e);
         }
     }
 

@@ -28,14 +28,14 @@ package me.lucko.luckperms.common.commands.track;
 import me.lucko.luckperms.common.actionlog.LoggedAction;
 import me.lucko.luckperms.common.command.CommandResult;
 import me.lucko.luckperms.common.command.abstraction.ChildCommand;
+import me.lucko.luckperms.common.command.access.ArgumentPermissions;
 import me.lucko.luckperms.common.command.access.CommandPermission;
+import me.lucko.luckperms.common.command.spec.CommandSpec;
 import me.lucko.luckperms.common.command.tabcomplete.TabCompleter;
 import me.lucko.luckperms.common.command.tabcomplete.TabCompletions;
-import me.lucko.luckperms.common.command.utils.MessageUtils;
+import me.lucko.luckperms.common.command.utils.ArgumentList;
 import me.lucko.luckperms.common.command.utils.StorageAssistant;
-import me.lucko.luckperms.common.locale.LocaleManager;
-import me.lucko.luckperms.common.locale.command.CommandSpec;
-import me.lucko.luckperms.common.locale.message.Message;
+import me.lucko.luckperms.common.locale.Message;
 import me.lucko.luckperms.common.model.Group;
 import me.lucko.luckperms.common.model.Track;
 import me.lucko.luckperms.common.plugin.LuckPermsPlugin;
@@ -48,12 +48,17 @@ import net.luckperms.api.model.data.DataMutateResult;
 import java.util.List;
 
 public class TrackInsert extends ChildCommand<Track> {
-    public TrackInsert(LocaleManager locale) {
-        super(CommandSpec.TRACK_INSERT.localize(locale), "insert", CommandPermission.TRACK_INSERT, Predicates.not(2));
+    public TrackInsert() {
+        super(CommandSpec.TRACK_INSERT, "insert", CommandPermission.TRACK_INSERT, Predicates.not(2));
     }
 
     @Override
-    public CommandResult execute(LuckPermsPlugin plugin, Sender sender, Track track, List<String> args, String label) {
+    public CommandResult execute(LuckPermsPlugin plugin, Sender sender, Track target, ArgumentList args, String label) {
+        if (ArgumentPermissions.checkModifyPerms(plugin, sender, getPermission().get(), target)) {
+            Message.COMMAND_NO_PERMISSION.send(sender);
+            return CommandResult.NO_PERMISSION;
+        }
+
         String groupName = args.get(0).toLowerCase();
         if (!DataConstraints.GROUP_NAME_TEST.test(groupName)) {
             sendDetailedUsage(sender, label);
@@ -74,22 +79,22 @@ public class TrackInsert extends ChildCommand<Track> {
         }
 
         try {
-            DataMutateResult result = track.insertGroup(group, pos - 1);
+            DataMutateResult result = target.insertGroup(group, pos - 1);
 
             if (result.wasSuccessful()) {
-                Message.TRACK_INSERT_SUCCESS.send(sender, group.getName(), track.getName(), pos);
-                if (track.getGroups().size() > 1) {
-                    Message.BLANK.send(sender, MessageUtils.listToArrowSep(track.getGroups(), group.getName()));
+                Message.TRACK_INSERT_SUCCESS.send(sender, group.getName(), target.getName(), pos);
+                if (target.getGroups().size() > 1) {
+                    Message.TRACK_PATH_HIGHLIGHTED.send(sender, target.getGroups(), group.getName());
                 }
 
-                LoggedAction.build().source(sender).target(track)
+                LoggedAction.build().source(sender).target(target)
                         .description("insert", group.getName(), pos)
                         .build().submit(plugin, sender);
 
-                StorageAssistant.save(track, sender, plugin);
+                StorageAssistant.save(target, sender, plugin);
                 return CommandResult.SUCCESS;
             } else {
-                Message.TRACK_ALREADY_CONTAINS.send(sender, track.getName(), group.getName());
+                Message.TRACK_ALREADY_CONTAINS.send(sender, target.getName(), group);
                 return CommandResult.STATE_ERROR;
             }
 
@@ -100,7 +105,7 @@ public class TrackInsert extends ChildCommand<Track> {
     }
 
     @Override
-    public List<String> tabComplete(LuckPermsPlugin plugin, Sender sender, List<String> args) {
+    public List<String> tabComplete(LuckPermsPlugin plugin, Sender sender, ArgumentList args) {
         return TabCompleter.create()
                 .at(0, TabCompletions.groups(plugin))
                 .complete(args);

@@ -31,11 +31,10 @@ import me.lucko.luckperms.common.command.abstraction.ChildCommand;
 import me.lucko.luckperms.common.command.abstraction.CommandException;
 import me.lucko.luckperms.common.command.access.ArgumentPermissions;
 import me.lucko.luckperms.common.command.access.CommandPermission;
-import me.lucko.luckperms.common.command.utils.ArgumentParser;
+import me.lucko.luckperms.common.command.spec.CommandSpec;
+import me.lucko.luckperms.common.command.utils.ArgumentList;
 import me.lucko.luckperms.common.command.utils.StorageAssistant;
-import me.lucko.luckperms.common.locale.LocaleManager;
-import me.lucko.luckperms.common.locale.command.CommandSpec;
-import me.lucko.luckperms.common.locale.message.Message;
+import me.lucko.luckperms.common.locale.Message;
 import me.lucko.luckperms.common.model.Group;
 import me.lucko.luckperms.common.node.types.Weight;
 import me.lucko.luckperms.common.plugin.LuckPermsPlugin;
@@ -45,32 +44,30 @@ import me.lucko.luckperms.common.util.Predicates;
 import net.luckperms.api.model.data.DataType;
 import net.luckperms.api.node.NodeType;
 
-import java.util.List;
-
 public class GroupSetWeight extends ChildCommand<Group> {
-    public GroupSetWeight(LocaleManager locale) {
-        super(CommandSpec.GROUP_SETWEIGHT.localize(locale), "setweight", CommandPermission.GROUP_SET_WEIGHT, Predicates.not(1));
+    public GroupSetWeight() {
+        super(CommandSpec.GROUP_SETWEIGHT, "setweight", CommandPermission.GROUP_SET_WEIGHT, Predicates.not(1));
     }
 
     @Override
-    public CommandResult execute(LuckPermsPlugin plugin, Sender sender, Group group, List<String> args, String label) throws CommandException {
-        if (ArgumentPermissions.checkModifyPerms(plugin, sender, getPermission().get(), group)) {
+    public CommandResult execute(LuckPermsPlugin plugin, Sender sender, Group target, ArgumentList args, String label) throws CommandException {
+        if (ArgumentPermissions.checkModifyPerms(plugin, sender, getPermission().get(), target)) {
             Message.COMMAND_NO_PERMISSION.send(sender);
             return CommandResult.NO_PERMISSION;
         }
 
-        int weight = ArgumentParser.parsePriority(0, args);
+        int weight = args.getPriority(0);
 
-        group.removeIf(DataType.NORMAL, null, NodeType.WEIGHT::matches, false);
-        group.setNode(DataType.NORMAL, Weight.builder(weight).build(), true);
+        target.removeIf(DataType.NORMAL, null, NodeType.WEIGHT::matches, false);
+        target.setNode(DataType.NORMAL, Weight.builder(weight).build(), true);
 
-        Message.GROUP_SET_WEIGHT.send(sender, weight, group.getFormattedDisplayName());
+        Message.GROUP_SET_WEIGHT.send(sender, weight, target);
 
-        LoggedAction.build().source(sender).target(group)
+        LoggedAction.build().source(sender).target(target)
                 .description("setweight", weight)
                 .build().submit(plugin, sender);
 
-        StorageAssistant.save(group, sender, plugin);
+        StorageAssistant.save(target, sender, plugin);
         return CommandResult.SUCCESS;
     }
 }

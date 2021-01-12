@@ -30,13 +30,16 @@ import me.lucko.luckperms.common.cacheddata.UserCachedDataManager;
 import me.lucko.luckperms.common.config.ConfigKeys;
 import me.lucko.luckperms.common.plugin.LuckPermsPlugin;
 
+import net.kyori.adventure.text.Component;
+import net.luckperms.api.query.QueryOptions;
+
 import org.checkerframework.checker.nullness.qual.Nullable;
 
 import java.util.Optional;
 import java.util.UUID;
 
 public class User extends PermissionHolder {
-    private final ApiUser apiDelegate = new ApiUser(this);
+    private final ApiUser apiProxy = new ApiUser(this);
 
     /**
      * The users Mojang UUID
@@ -66,16 +69,6 @@ public class User extends PermissionHolder {
         getPlugin().getEventDispatcher().dispatchUserCacheLoad(this, this.cachedData);
     }
 
-    @Override
-    protected void invalidateCache() {
-        super.invalidateCache();
-
-        // invalidate our caches
-        if (this.primaryGroup instanceof PrimaryGroupHolder.AbstractContextual) {
-            ((PrimaryGroupHolder.AbstractContextual) this.primaryGroup).invalidateCache();
-        }
-    }
-
     public UUID getUniqueId() {
         return this.uniqueId;
     }
@@ -90,17 +83,27 @@ public class User extends PermissionHolder {
     }
 
     @Override
-    public String getFormattedDisplayName() {
-        return this.username != null ? this.username : this.uniqueId.toString();
+    public Component getFormattedDisplayName() {
+        return Component.text(getPlainDisplayName());
     }
 
     @Override
     public String getPlainDisplayName() {
-        return getFormattedDisplayName();
+        return this.username != null ? this.username : this.uniqueId.toString();
     }
 
-    public ApiUser getApiDelegate() {
-        return this.apiDelegate;
+    @Override
+    public QueryOptions getQueryOptions() {
+        QueryOptions queryOptions = getPlugin().getQueryOptionsForUser(this).orElse(null);
+        if (queryOptions != null) {
+            return queryOptions;
+        }
+
+        return getPlugin().getContextManager().getStaticQueryOptions();
+    }
+
+    public ApiUser getApiProxy() {
+        return this.apiProxy;
     }
 
     @Override
