@@ -53,7 +53,6 @@ import me.lucko.luckperms.sponge.model.manager.SpongeGroupManager;
 import me.lucko.luckperms.sponge.model.manager.SpongeUserManager;
 import me.lucko.luckperms.sponge.service.LuckPermsService;
 import me.lucko.luckperms.sponge.service.ProxyFactory;
-import me.lucko.luckperms.sponge.service.events.UpdateEventHandler;
 import me.lucko.luckperms.sponge.service.model.LPPermissionService;
 import me.lucko.luckperms.sponge.service.model.LPSubjectCollection;
 import me.lucko.luckperms.sponge.service.model.ProxiedServiceObject;
@@ -94,7 +93,6 @@ public class LPSpongePlugin extends AbstractLuckPermsPlugin {
     private StandardTrackManager trackManager;
     private SpongeContextManager contextManager;
     private LuckPermsService service;
-    private UpdateEventHandler updateEventHandler;
 
     private boolean lateLoad = false;
 
@@ -116,7 +114,7 @@ public class LPSpongePlugin extends AbstractLuckPermsPlugin {
     protected Set<Dependency> getGlobalDependencies() {
         Set<Dependency> dependencies = super.getGlobalDependencies();
         dependencies.add(Dependency.ADVENTURE_PLATFORM);
-        dependencies.add(Dependency.ADVENTURE_PLATFORM_SPONGEAPI);
+        //dependencies.add(Dependency.ADVENTURE_PLATFORM_SPONGEAPI);
         dependencies.add(Dependency.CONFIGURATE_CORE);
         dependencies.add(Dependency.CONFIGURATE_HOCON);
         dependencies.add(Dependency.HOCON_CONFIG);
@@ -170,7 +168,6 @@ public class LPSpongePlugin extends AbstractLuckPermsPlugin {
     @Override
     protected void setupPlatformHooks() {
         getLogger().info("Registering PermissionService...");
-        this.updateEventHandler = UpdateEventHandler.obtain(this);
         this.service = new LuckPermsService(this);
 
         PermissionService oldService = this.bootstrap.getGame().getServiceManager().provide(PermissionService.class).orElse(null);
@@ -323,10 +320,6 @@ public class LPSpongePlugin extends AbstractLuckPermsPlugin {
 
     public LuckPermsService getService() {
         return this.service;
-    }
-
-    public UpdateEventHandler getUpdateEventHandler() {
-        return this.updateEventHandler;
     }
 
 }

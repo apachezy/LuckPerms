@@ -23,20 +23,18 @@
  *  SOFTWARE.
  */
 
-package me.lucko.luckperms.fabric.event;
+package me.lucko.luckperms.common.calculator.processor;
 
-import net.fabricmc.fabric.api.event.Event;
-import net.fabricmc.fabric.api.event.EventFactory;
-import net.minecraft.server.network.ServerPlayerEntity;
+import me.lucko.luckperms.common.calculator.result.TristateResult;
 
-// TODO: Use Fabric API alternative when merged.
-// https://github.com/FabricMC/fabric/pull/957
-public interface RespawnPlayerCallback {
-    Event<RespawnPlayerCallback> EVENT = EventFactory.createArrayBacked(RespawnPlayerCallback.class, (callbacks) -> (newPlayer, oldPlayer, alive) -> {
-        for (RespawnPlayerCallback callback : callbacks) {
-            callback.onRespawn(newPlayer, oldPlayer, alive);
-        }
-    });
+import net.luckperms.api.util.Tristate;
 
-    void onRespawn(ServerPlayerEntity oldPlayer, ServerPlayerEntity newPlayer, boolean alive);
+public class DirectProcessor extends AbstractPermissionProcessor implements PermissionProcessor {
+    private static final TristateResult.Factory RESULT_FACTORY = new TristateResult.Factory(DirectProcessor.class);
+
+    @Override
+    public TristateResult hasPermission(String permission) {
+        return RESULT_FACTORY.result(Tristate.of(this.sourceMap.get(permission)));
+    }
+
 }

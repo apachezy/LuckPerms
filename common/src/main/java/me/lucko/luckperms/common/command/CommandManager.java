@@ -40,7 +40,6 @@ import me.lucko.luckperms.common.commands.group.ListGroups;
 import me.lucko.luckperms.common.commands.log.LogParentCommand;
 import me.lucko.luckperms.common.commands.misc.ApplyEditsCommand;
 import me.lucko.luckperms.common.commands.misc.BulkUpdateCommand;
-import me.lucko.luckperms.common.commands.misc.CheckCommand;
 import me.lucko.luckperms.common.commands.misc.EditorCommand;
 import me.lucko.luckperms.common.commands.misc.ExportCommand;
 import me.lucko.luckperms.common.commands.misc.ImportCommand;
@@ -73,8 +72,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -84,16 +82,13 @@ import java.util.stream.Collectors;
 public class CommandManager {
 
     private final LuckPermsPlugin plugin;
-
-    // the default executor to run commands on
-    private final ExecutorService executor = Executors.newSingleThreadExecutor();
-
+    private final ReentrantLock lock;
     private final TabCompletions tabCompletions;
-
     private final Map<String, Command<?>> mainCommands;
 
     public CommandManager(LuckPermsPlugin plugin) {
         this.plugin = plugin;
+        this.lock = new ReentrantLock(true); // enable fairness
         this.tabCompletions = new TabCompletions(plugin);
         this.mainCommands = ImmutableList.<Command<?>>builder()
                 .add(new UserParentCommand())
@@ -107,7 +102,6 @@ public class CommandManager {
                 .add(new VerboseCommand())
                 .add(new TreeCommand())
                 .add(new SearchCommand())
-                .add(new CheckCommand())
                 .add(new NetworkSyncCommand())
                 .add(new ImportCommand())
                 .add(new ExportCommand())
@@ -136,13 +130,16 @@ public class CommandManager {
 
     public CompletableFuture<CommandResult> executeCommand(Sender sender, String label, List<String> args) {
         return CompletableFuture.supplyAsync(() -> {
+            this.lock.lock();
             try {
                 return execute(sender, label, args);
             } catch (Throwable e) {
                 this.plugin.getLogger().severe("Exception whilst executing command: " + args, e);
                 return null;
+            } finally {
+                this.lock.unlock();
             }
-        }, this.executor);
+        }, this.plugin.getBootstrap().getScheduler().async());
     }
 
     public boolean hasPermissionForAny(Sender sender) {

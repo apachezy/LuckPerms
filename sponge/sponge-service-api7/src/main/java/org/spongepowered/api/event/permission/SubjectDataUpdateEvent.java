@@ -23,27 +23,14 @@
  *  SOFTWARE.
  */
 
-package me.lucko.luckperms.fabric.mixin;
+package org.spongepowered.api.event.permission;
 
-import me.lucko.luckperms.fabric.event.RespawnPlayerCallback;
+import org.spongepowered.api.event.Event;
+import org.spongepowered.api.service.permission.SubjectData;
 
-import net.minecraft.server.PlayerManager;
-import net.minecraft.server.network.ServerPlayerEntity;
+// Copy of https://github.com/SpongePowered/SpongeAPI/blob/api-8/src/main/java/org/spongepowered/api/event/permission/SubjectDataUpdateEvent.java
+public interface SubjectDataUpdateEvent extends Event {
 
-import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
-import org.spongepowered.asm.mixin.injection.callback.LocalCapture;
-
-@Mixin(PlayerManager.class)
-public abstract class PlayerManagerMixin {
-
-    // Implement the callback for RespawnPlayerCallback
-    // We'll switch to Fabric's event when FabricMC/fabric#957 is merged.
-    @Inject(at = @At("TAIL"), method = "respawnPlayer", locals = LocalCapture.CAPTURE_FAILEXCEPTION)
-    private void luckperms_onRespawnPlayer(ServerPlayerEntity player, boolean alive, CallbackInfoReturnable<ServerPlayerEntity> cir) {
-        RespawnPlayerCallback.EVENT.invoker().onRespawn(player, cir.getReturnValue(), alive); // Transfer the old caches to the new player.
-    }
+    SubjectData getUpdatedData();
 
 }
